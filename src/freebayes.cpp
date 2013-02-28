@@ -26,6 +26,7 @@
 #include "Sample.h"
 #include "AlleleParser.h"
 #include "Utility.h"
+#include "SegfaultHandler.h"
 
 #include "multichoose.h"
 #include "multipermute.h"
@@ -59,6 +60,9 @@ using namespace std;
 // freebayes main
 int main (int argc, char *argv[]) {
 
+    // install segfault handler
+    signal(SIGSEGV, segfaultHandler);
+
     AlleleParser* parser = new AlleleParser(argc, argv);
     Parameters& parameters = parser->parameters;
     list<Allele*> alleles;
@@ -66,6 +70,11 @@ int main (int argc, char *argv[]) {
     Samples samples;
 
     ostream& out = *(parser->output);
+
+    Bias observationBias;
+    if (!parameters.alleleObservationBiasFile.empty()) {
+	observationBias.open(parameters.alleleObservationBiasFile);
+    }
 
     // this can be uncommented to force operation on a specific set of genotypes
     vector<Allele> allGenotypeAlleles;
@@ -151,8 +160,6 @@ int main (int argc, char *argv[]) {
             DEBUG2("coverage " << parser->currentSequenceName << ":" << parser->currentPosition << " == " << coverage);
 
             // establish a set of possible alternate alleles to evaluate at this location
-            // only evaluate alleles with at least one supporting read with mapping
-            // quality (MQL1) and base quality (BQL1)
 
             if (!sufficientAlternateObservations(samples, parameters.minAltCount, parameters.minAltFraction)) {
                 DEBUG("insufficient alternate observations");
@@ -200,6 +207,9 @@ int main (int argc, char *argv[]) {
 
         // re-calculate coverage, as this could change now that we've built haplotype alleles
         coverage = countAlleles(samples);
+
+	// estimate theta using the haplotype length
+	long double theta = parameters.TH * parser->lastHaplotypeLength;
 
         if (genotypeAlleles.size() <= 1) { // if we have only one viable allele, we don't have evidence for variation at this site
             DEBUG2("no alternate genotype alleles passed filters at " << parser->currentSequenceName << ":" << parser->currentPosition);
@@ -278,7 +288,10 @@ int main (int argc, char *argv[]) {
             }
 
             // get genotype likelihoods
-            vector<pair<Genotype*, long double> > probs = probObservedAllelesGivenGenotypes(sample, genotypesWithObs, parameters.RDF, parameters.useMappingQuality);
+            vector<pair<Genotype*, long double> > probs
+		= probObservedAllelesGivenGenotypes(sample, genotypesWithObs,
+						    parameters.RDF, parameters.useMappingQuality,
+						    observationBias);
 
 #ifdef VERBOSE_DEBUG
             if (parameters.debug2) {
@@ -295,6 +308,7 @@ int main (int argc, char *argv[]) {
             for (vector<pair<Genotype*, long double> >::iterator p = probs.begin(); p != probs.end(); ++p) {
                 sampleData.push_back(SampleDataLikelihood(sampleName, &sample, p->first, p->second, 0));
             }
+
             sortSampleDataLikelihoods(sampleData);
 
             string& population = parser->samplePopulation[sampleName];
@@ -304,9 +318,8 @@ int main (int argc, char *argv[]) {
 
             if (parameters.genotypeVariantThreshold != 0) {
                 if (sampleData.size() > 1
-                        && float2phred(1 - (exp(sampleData.front().prob) - exp(sampleData.at(1).prob)))
-                            < parameters.genotypeVariantThreshold) {
-                    //cout << "varying sample " << name << endl;
+		    && abs(sampleData.at(1).prob - sampleData.front().prob)
+		    < parameters.genotypeVariantThreshold) {
                     variantSampleDataLikelihoods.push_back(sampleData);
                 } else {
                     invariantSampleDataLikelihoods.push_back(sampleData);
@@ -366,6 +379,8 @@ int main (int argc, char *argv[]) {
 
         map<string, list<GenotypeCombo> > genotypeCombosByPopulation;
 
+	int genotypingTotalIterations = 0; // tally total iterations required to reach convergence
+
         for (map<string, SampleDataLikelihoods>::iterator p = sampleDataLikelihoodsByPopulation.begin(); p != sampleDataLikelihoodsByPopulation.end(); ++p) {
 
             const string& population = p->first;
@@ -394,8 +409,8 @@ int main (int argc, char *argv[]) {
 					       sampleDataLikelihoods,
 					       nullDataLikelihoods,
 					       inputAlleleCounts,
-					       parameters.TH,
-					       parameters.pooled,
+					       theta,
+					       parameters.pooledDiscrete,
 					       parameters.ewensPriors,
 					       parameters.permute,
 					       parameters.hwePriors,
@@ -415,8 +430,8 @@ int main (int argc, char *argv[]) {
                     inputAlleleCounts,
                     parameters.WB,
                     parameters.TB,
-                    parameters.TH,
-                    parameters.pooled,
+		    theta,
+                    parameters.pooledDiscrete,
                     parameters.ewensPriors,
                     parameters.permute,
                     parameters.hwePriors,
@@ -424,6 +439,7 @@ int main (int argc, char *argv[]) {
                     parameters.alleleBalancePriors,
                     parameters.diffusionPriorScalar,
                     parameters.siteSelectionMaxIterations,
+		    genotypingTotalIterations,
                     addHomozygousCombos);
 	    }
 
@@ -449,7 +465,7 @@ int main (int argc, char *argv[]) {
         }
         long double posteriorNormalizer = logsumexp_probs(comboProbs);
 
-        DEBUG2("got posterior normalizer");
+        DEBUG2("got posterior normalizer " << posteriorNormalizer);
         if (parameters.trace) {
             parser->traceFile << parser->currentSequenceName << "," 
                 << (long unsigned int) parser->currentPosition + 1 << ",posterior_normalizer," << posteriorNormalizer << endl;
@@ -465,8 +481,8 @@ int main (int argc, char *argv[]) {
         // the approach is go through all the homozygous combos
         // and then subtract this from 1... resolving p(var|d)
 
-        long double pVar = 1.0;
-        long double pHom = 0.0;
+        BigFloat pVar = 1.0;
+        BigFloat pHom = 0.0;
 
         long double bestComboOddsRatio = 0;
 
@@ -481,8 +497,8 @@ int main (int argc, char *argv[]) {
             if (gc->isHomozygous()
                     && (parameters.useRefAllele
                         || !parameters.useRefAllele && gc->alleles().front() == referenceBase)) {
-                pVar -= safe_exp(gc->posteriorProb - posteriorNormalizer);
-                pHom += safe_exp(gc->posteriorProb - posteriorNormalizer);
+                pVar -= big_exp(gc->posteriorProb - posteriorNormalizer);
+                pHom += big_exp(gc->posteriorProb - posteriorNormalizer);
             } else if (!hasHetCombo) { // get the first het combo
                 bestCombo = *gc;
                 hasHetCombo = true;
@@ -497,7 +513,7 @@ int main (int argc, char *argv[]) {
             bestCombo = genotypeCombos.front();
         }
 
-        DEBUG2("best combo: " << bestCombo);
+        DEBUG2("best het combo: " << bestCombo);
 
         // odds ratio between the first and second-best combinations
         if (genotypeCombos.size() > 1) {
@@ -551,22 +567,23 @@ int main (int argc, char *argv[]) {
         }
 
         DEBUG2("got bestAlleleSamplingProb");
-        DEBUG("pVar = " << pVar << " " << parameters.PVL
-              << " pHom = " << pHom
-              << " 1 - pHom = " << 1 - pHom);
+        DEBUG("pVar = " << pVar.ToString() << " " << parameters.PVL
+              << " pHom = " << pHom.ToString());
 
-        DEBUG2("1 - " << pHom << " >= " << parameters.PVL);
+        DEBUG2("1 - " << pHom.ToString() << " >= " << parameters.PVL);
         // the second clause guards against float underflow causing us not to output a position
         // practically, parameters.PVL == 0 means "report all genotypes which pass our input filters"
-        if ((1 - pHom) >= parameters.PVL || parameters.PVL == 0) {
+        if ((1 - pHom.ToDouble()) >= parameters.PVL || parameters.PVL == 0) {
             DEBUG2("passed PVL threshold");
 
             GenotypeCombo bestGenotypeComboByMarginals;
             vector<vector<SampleDataLikelihood> > allSampleDataLikelihoods;
 
-            if (parameters.calculateMarginals) {
 
-                DEBUG("calculating marginal likelihoods");
+	    //if (parameters.calculateMarginals) {
+	    {
+
+                DEBUG("searching genotype space");
 
                 // resample the posterior, this time without bounds on the
                 // samples we vary, ensuring that we can generate marginals for
@@ -613,8 +630,8 @@ int main (int argc, char *argv[]) {
 						       sampleDataLikelihoods,
 						       nullDataLikelihoods,
 						       inputAlleleCounts,
-						       parameters.TH,
-						       parameters.pooled,
+						       theta,
+						       parameters.pooledDiscrete,
 						       parameters.ewensPriors,
 						       parameters.permute,
 						       parameters.hwePriors,
@@ -637,8 +654,8 @@ int main (int argc, char *argv[]) {
                             inputAlleleCounts,
                             adjustedBandwidth,
                             adjustedBanddepth,
-                            parameters.TH,
-                            parameters.pooled,
+			    theta,
+                            parameters.pooledDiscrete,
                             parameters.ewensPriors,
                             parameters.permute,
                             parameters.hwePriors,
@@ -646,6 +663,7 @@ int main (int argc, char *argv[]) {
                             parameters.alleleBalancePriors,
                             parameters.diffusionPriorScalar,
                             itermax,
+			    genotypingTotalIterations,
                             true); // add homozygous combos
                         // ^^ combo results are sorted by default
 		    }
@@ -670,8 +688,8 @@ int main (int argc, char *argv[]) {
                     if (gc->isHomozygous()
                             && (parameters.useRefAllele
                                 || !parameters.useRefAllele && gc->alleles().front() == referenceBase)) {
-                        pVar -= safe_exp(gc->posteriorProb - posteriorNormalizer);
-                        pHom += safe_exp(gc->posteriorProb - posteriorNormalizer);
+                        pVar -= big_exp(gc->posteriorProb - posteriorNormalizer);
+                        pHom += big_exp(gc->posteriorProb - posteriorNormalizer);
                     } else if (!hasHetCombo) { // get the first het combo
                         bestCombo = *gc;
                         hasHetCombo = true;
@@ -693,22 +711,22 @@ int main (int argc, char *argv[]) {
                     bestComboOddsRatio = genotypeCombos.front().posteriorProb - (++genotypeCombos.begin())->posteriorProb;
                 }
 
-                // make a combined, all-populations sample data likelihoods vector to accumulate marginals
-                SampleDataLikelihoods allSampleDataLikelihoods;
-                for (map<string, SampleDataLikelihoods>::iterator p = sampleDataLikelihoodsByPopulation.begin(); p != sampleDataLikelihoodsByPopulation.end(); ++p) {
-                    SampleDataLikelihoods& sdls = p->second;
-                    allSampleDataLikelihoods.reserve(allSampleDataLikelihoods.size() + distance(sdls.begin(), sdls.end()));
-                    allSampleDataLikelihoods.insert(allSampleDataLikelihoods.end(), sdls.begin(), sdls.end());
-                }
+		if (parameters.calculateMarginals) {
+		    // make a combined, all-populations sample data likelihoods vector to accumulate marginals
+		    SampleDataLikelihoods allSampleDataLikelihoods;
+		    for (map<string, SampleDataLikelihoods>::iterator p = sampleDataLikelihoodsByPopulation.begin(); p != sampleDataLikelihoodsByPopulation.end(); ++p) {
+			SampleDataLikelihoods& sdls = p->second;
+			allSampleDataLikelihoods.reserve(allSampleDataLikelihoods.size() + distance(sdls.begin(), sdls.end()));
+			allSampleDataLikelihoods.insert(allSampleDataLikelihoods.end(), sdls.begin(), sdls.end());
+		    }
+		    // calculate the marginal likelihoods for this population
+		    marginalGenotypeLikelihoods(genotypeCombos, allSampleDataLikelihoods);
+		    // store the marginal data likelihoods in the results, for easy parsing
+		    // like a vector -> map conversion...
+		    results.update(allSampleDataLikelihoods);
+		}
 
-                // calculate the marginal likelihoods for this population
-                marginalGenotypeLikelihoods(genotypeCombos, allSampleDataLikelihoods);
-
-                // store the marginal data likelihoods in the results, for easy parsing
-                // like a vector -> map conversion...
-                results.update(allSampleDataLikelihoods);
-
-            }
+	    }
 
             map<string, int> repeats;
             if (parameters.showReferenceRepeats) {
@@ -716,7 +734,9 @@ int main (int argc, char *argv[]) {
             }
 
             vector<Allele> alts;
-            if (parameters.onlyUseInputAlleles || parameters.reportAllHaplotypeAlleles) {
+            if (parameters.onlyUseInputAlleles
+		|| parameters.reportAllHaplotypeAlleles
+		|| parameters.pooledContinuous) {
                 //alts = genotypeAlleles;
                 for (vector<Allele>::iterator a = genotypeAlleles.begin(); a != genotypeAlleles.end(); ++a) {
                     if (!a->isReference()) {
@@ -752,6 +772,7 @@ int main (int argc, char *argv[]) {
                     referenceBase,
                     alts,
                     repeats,
+		    genotypingTotalIterations,
                     parser->sampleList,
                     coverage,
                     bestCombo,

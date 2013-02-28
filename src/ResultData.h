@@ -42,13 +42,14 @@ public:
 
     vcf::Variant& vcf(
         vcf::Variant& var, // variant to update
-        long double pHom,
+        BigFloat pHom,
         long double bestComboOddsRatio,
         //long double alleleSamplingProb,
         Samples& samples,
         string refbase,
         vector<Allele>& altAlleles,
         map<string, int> repeats,
+	int genotypingIterations,
         vector<string>& sampleNames,
         int coverage,
         GenotypeCombo& genotypeCombo,

@@ -15,8 +15,7 @@ CFLAGS=-O3 -D_FILE_OFFSET_BITS=64
 BAMTOOLS_ROOT=../bamtools
 
 LIBS = -lz -lm -L./ -L../vcflib/tabixpp/ -L$(BAMTOOLS_ROOT)/lib -ltabix
-INCLUDE = -I$(BAMTOOLS_ROOT)/src
-
+INCLUDE = -I$(BAMTOOLS_ROOT)/src -I../ttmath
 
 all: ../bin/freebayes ../bin/bamleftalign
 
@@ -24,7 +23,7 @@ static:
 	$(MAKE) CFLAGS="$(CFLAGS) -static" all
 
 debug:
-	$(MAKE) CFLAGS="$(CFLAGS) -D VERBOSE_DEBUG" all
+	$(MAKE) CFLAGS="$(CFLAGS) -D VERBOSE_DEBUG -g -rdynamic" all
 
 profiling:
 	$(MAKE) CFLAGS="$(CFLAGS) -g" all
@@ -59,6 +58,8 @@ OBJECTS=BedReader.o \
 		split.o \
 		LeftAlign.o \
 		IndelAllele.o \
+		Bias.o \
+		SegfaultHandler.o \
 		../vcflib/tabixpp/tabix.o \
 		../vcflib/tabixpp/bgzf.o \
 		../vcflib/smithwaterman/SmithWatermanGotoh.o \
@@ -127,6 +128,9 @@ AlleleParser.o: AlleleParser.cpp AlleleParser.h multichoose.h Parameters.h $(BAM
 Utility.o: Utility.cpp Utility.h Sum.h Product.h
 	$(CC) $(CFLAGS) $(INCLUDE) -c Utility.cpp
 
+SegfaultHandler.o: SegfaultHandler.cpp SegfaultHandler.h
+	$(CC) $(CFLAGS) $(INCLUDE) -c SegfaultHandler.cpp
+
 Dirichlet.o: Dirichlet.h Dirichlet.cpp Sum.h Product.h
 	$(CC) $(CFLAGS) $(INCLUDE) -c Dirichlet.cpp
 
@@ -150,6 +154,9 @@ BedReader.o: BedReader.cpp BedReader.h
 
 CNV.o: CNV.cpp CNV.h
 	$(CC) $(CFLAGS) $(INCLUDE) -c CNV.cpp
+
+Bias.o: Bias.cpp Bias.h
+	$(CC) $(CFLAGS) $(INCLUDE) -c Bias.cpp
 
 split.o: split.h split.cpp
 	$(CC) $(CFLAGS) $(INCLUDE) -c split.cpp

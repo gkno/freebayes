@@ -41,6 +41,7 @@ public:
     string haplotypeVariantFile;
     bool reportAllHaplotypeAlleles;
     bool onlyUseInputAlleles;
+    string alleleObservationBiasFile;
 
     // operation parameters
     bool outputAlleles;          //  unused...
@@ -57,10 +58,12 @@ public:
     bool allowComplex;           // -X --allow-complex
     int maxComplexGap;
     bool allowSNPs;              // -I --no-snps
-    bool pooled;                 // -J --pooled
+    bool pooledDiscrete;
+    bool pooledContinuous;
     bool ewensPriors;
     bool permute;                //    --permute
     bool useMappingQuality;      //
+    bool useMinIndelQuality;
     bool obsBinomialPriors;
     bool alleleBalancePriors;
     bool hwePriors;
@@ -80,8 +83,8 @@ public:
     int ploidy;                  // -p --ploidy
     int MQL0;                    // -m --min-mapping-quality
     int BQL0;                    // -q --min-base-quality
-    int MQL1;                    // -R --min-supporting-mapping-quality
-    int BQL1;                    // -S --min-supporting-base-quality
+    int minSupportingMappingQualitySum;                    // -R --min-supporting-mapping-quality
+    int minSupportingAlleleQualitySum;                    // -S --min-supporting-base-quality
     int BQL2;                    // -Q --mismatch-base-quality-threshold
     int RMU;                     // -U --read-mismatch-limit
     float readMaxMismatchFraction;  // -z --read-max-mismatch-fraction
@@ -116,6 +119,7 @@ public:
     // functions
     Parameters(int argc, char** argv);
     void usage(char **argv);
+    void simpleUsage(char **argv);
 
     // reporting
     string commandline;

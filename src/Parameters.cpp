@@ -3,11 +3,85 @@
 
 using namespace std;
 
+void Parameters::simpleUsage(char ** argv) {
+   cout
+         << "usage: " << argv[0] << " -f [REFERENCE] [OPTIONS] [BAM FILES] >[OUTPUT]" << endl
+         << endl
+         << "Bayesian haplotype-based polymorphism discovery." << endl
+         << endl
+         << "citation: Erik Garrison, Gabor Marth" << endl
+         << "          \"Haplotype-based variant detection from short-read sequencing\"" << endl
+         << "          arXiv:1207.3907 (http://arxiv.org/abs/1207.3907)" << endl
+         << endl
+         << "overview:" << endl
+         << endl
+         << "    To call variants from aligned short-read sequencing data, supply BAM files and" << endl
+         << "    a reference.  FreeBayes will provide VCF output on standard out describing SNPs," << endl
+         << "    indels, and complex variants in samples in the input alignments." << endl
+         << endl
+         << "    By default, FreeBayes will consider variants supported by at least 2" << endl
+         << "    observations in a single sample (-C) and also by at least 20% of the reads from" << endl
+         << "    a single sample (-F).  These settings are suitable to low to high depth" << endl
+         << "    sequencing in haploid and diploid samples, but users working with polyploid or" << endl
+         << "    pooled samples may wish to adjust them depending on the characteristics of" << endl
+         << "    their sequencing data." << endl
+         << endl
+         << "    FreeBayes is capable of calling variant haplotypes shorter than a read length" << endl
+         << "    where multiple polymorphisms segregate on the same read.  The maximum distance" << endl
+         << "    between polymorphisms phased in this way is determined by the --max-complex-gap," << endl
+         << "    which defaults to 3bp." << endl
+         << endl
+         << "    Ploidy may be set to any level (-p), but by default all samples are assumed to" << endl
+         << "    be diploid.  FreeBayes can model per-sample and per-region variation in" << endl
+         << "    copy-number (-A) using a copy-number variation map." << endl
+         << endl
+         << "    FreeBayes can act as a frequency-based pooled caller and describe variants" << endl
+         << "    and haplotypes in terms of observation frequency rather than called genotypes." << endl
+         << "    To do so, use --pooled-continuous and set input filters to a suitable level." << endl
+         << "    Allele observation counts will be described by AO and RO fields in the VCF output." << endl
+         << endl
+         << "parameters:" << endl
+         << endl
+         << "   -h --help       Complete description of options." << endl
+         << endl
+         << "author:   Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010-2012" << endl
+         << "date:     " << FREEBAYES_COMPILE_DATE << endl
+         << "version:  " << FREEBAYES_VERSION << endl;
+
+}
+
 void Parameters::usage(char** argv) {
     cout 
          << "usage: " << argv[0] << " [OPTION] ... [BAM FILE] ... " << endl
          << endl
-         << "Bayesian small polymorphism discovery." << endl
+         << "Bayesian haplotype-based polymorphism discovery." << endl
+         << endl
+         << "citation: Erik Garrison, Gabor Marth" << endl
+         << "          \"Haplotype-based variant detection from short-read sequencing\"" << endl
+         << "          arXiv:1207.3907 (http://arxiv.org/abs/1207.3907)" << endl
+         << endl
+         << "overview:" << endl
+         << endl
+         << "    To call variants from aligned short-read sequencing data, supply BAM files and" << endl
+         << "    a reference.  FreeBayes will provide VCF output on standard out describing SNPs," << endl
+         << "    indels, and complex variants in samples in the input alignments." << endl
+         << endl
+         << "    By default, FreeBayes will consider variants supported by at least 2" << endl
+         << "    observations in a single sample (-C) and also by at least 20% of the reads from" << endl
+         << "    a single sample (-F).  These settings are suitable to low to high depth" << endl
+         << "    sequencing in haploid and diploid samples, but users working with polyploid or" << endl
+         << "    pooled samples may wish to adjust them depending on the characteristics of" << endl
+         << "    their sequencing data." << endl
+         << endl
+         << "    FreeBayes is capable of calling variant haplotypes shorter than a read length" << endl
+         << "    where multiple polymorphisms segregate on the same read.  The maximum distance" << endl
+         << "    between polymorphisms phased in this way is determined by the" << endl
+         << "    --max-complex-gap, which defaults to 3bp.  In practice, this can comfortably be" << endl
+         << "    set to half the read length." << endl
+         << endl
+         << "    Ploidy may be set to any level (-p), but by default all samples are assumed to" << endl
+         << "    be diploid.  FreeBayes can model per-sample and per-region variation in" << endl
+         << "    copy-number (-A) using a copy-number variation map." << endl
          << endl
          << "parameters:" << endl
          << endl
@@ -27,7 +101,7 @@ void Parameters::usage(char** argv) {
          << "                   Limit analysis to targets listed in the BED-format FILE." << endl
          << "   -r --region <chrom>:<start_position>..<end_position>" << endl
          << "                   Limit analysis to the specified region, 0-base coordinates," << endl
-         << "                   end_position not included (same as BED format)." << endl
+         << "                   end_position included." << endl
          << "   -s --samples FILE" << endl
          << "                   Limit analysis to samples listed (one per line) in the FILE." << endl
          << "                   By default FreeBayes will analyze all samples in its input" << endl
@@ -68,7 +142,8 @@ void Parameters::usage(char** argv) {
          << "reporting:" << endl
          << endl
          << "   -P --pvar N     Report sites if the probability that there is a polymorphism" << endl
-         << "                   at the site is greater than N.  default: 0.0001" << endl
+         << "                   at the site is greater than N.  default: 0.0.  Note that post-" << endl
+	 << "                   filtering is generally recommended over the use of this parameter." << endl
          << "   -_ --show-reference-repeats" << endl
          << "                   Calculate and show information about reference repeats in" << endl
          << "                   the VCF output." << endl
@@ -80,18 +155,21 @@ void Parameters::usage(char** argv) {
          << "                   single parameter to the Ewens Sampling Formula prior model" << endl
          << "                   default: 0.001" << endl
          << "   -p --ploidy N   Sets the default ploidy for the analysis to N.  default: 2" << endl
-         << "   -J --pooled     Assume that samples result from pooled sequencing." << endl
+         << "   -J --pooled-discrete" << endl
+	 << "                   Assume that samples result from pooled sequencing." << endl
+	 << "                   Model pooled samples using discrete genotypes across pools." << endl
          << "                   When using this flag, set --ploidy to the number of" << endl
-         << "                   alleles in each sample." << endl
+         << "                   alleles in each sample or use the --cnv-map to define" << endl
+	 << "                   per-sample ploidy." << endl
+         << "   -K --pooled-continuous" << endl
+	 << "                   Output all alleles which pass input filters, regardles of" << endl
+	 << "                   genotyping outcome or model." << endl
          << endl
          << "reference allele:" << endl
          << endl
          << "   -Z --use-reference-allele" << endl
          << "                   This flag includes the reference allele in the analysis as" << endl
          << "                   if it is another sample from the same population." << endl
-         << "   -H --diploid-reference" << endl
-         << "                   If using the reference sequence as a sample (-Z)," << endl
-         << "                   treat it as diploid.  default: false (reference is haploid)" << endl
          << "   --reference-quality MQ,BQ" << endl
          << "                   Assign mapping quality of MQ to the reference allele at each" << endl
          << "                   site and base quality of BQ.  default: 100,60" << endl
@@ -111,24 +189,26 @@ void Parameters::usage(char** argv) {
          << endl
          << "indel realignment:" << endl
          << endl
-         << "   -O --left-align-indels" << endl
-         << "                   Left-realign and merge gaps embedded in reads. default: false" << endl
+         << "   -O --dont-left-align-indels" << endl
+         << "                   Turn off left-alignment of indels, which is enabled by default." << endl
          << endl
          << "input filters:" << endl
          << endl
          << "   -4 --use-duplicate-reads" << endl
          << "                   Include duplicate-marked alignments in the analysis." << endl
-         << "                   default: exclude duplicates" << endl
+         << "                   default: exclude duplicates marked as such in alignments" << endl
          << "   -m --min-mapping-quality Q" << endl
          << "                   Exclude alignments from analysis if they have a mapping" << endl
-         << "                   quality less than Q.  default: 30" << endl
+         << "                   quality less than Q.  default: 0" << endl
          << "   -q --min-base-quality Q" << endl
          << "                   Exclude alleles from analysis if their supporting base" << endl
-         << "                   quality is less than Q.  default: 20" << endl
-         << "   -R --min-supporting-quality MQ,BQ" << endl
-         << "                   In order to consider an alternate allele, at least one supporting" << endl
-         << "                   alignment must have mapping quality MQ, and one supporting " << endl
-         << "                   allele must have base quality BQ. default: 0,0, unset" << endl
+         << "                   quality is less than Q.  default: 0" << endl
+         << "   -R --min-supporting-allele-qsum Q" << endl
+         << "                   Consider any allele in which the sum of qualities of supporting" << endl
+	 << "                   observations is at least Q.  default: 0" << endl
+	 << "   -Y --min-supporting-mapping-qsum Q" << endl
+	 << "                   Consider any allele in which and the sum of mapping qualities of" << endl
+         << "                   supporting reads is at least Q.  default: 0" << endl
          << "   -Q --mismatch-base-quality-threshold Q" << endl
          << "                   Count mismatches toward --read-mismatch-limit if the base" << endl
          << "                   quality of the mismatch is >= Q.  default: 10" << endl
@@ -155,11 +235,11 @@ void Parameters::usage(char** argv) {
          << "   -F --min-alternate-fraction N" << endl
          << "                   Require at least this fraction of observations supporting" << endl
          << "                   an alternate allele within a single individual in the" << endl
-         << "                   in order to evaluate the position.  default: 0.0" << endl
+         << "                   in order to evaluate the position.  default: 0.2" << endl
          << "   -C --min-alternate-count N" << endl
          << "                   Require at least this count of observations supporting" << endl
          << "                   an alternate allele within a single individual in order" << endl
-         << "                   to evaluate the position.  default: 1" << endl
+         << "                   to evaluate the position.  default: 2" << endl
          << "   -3 --min-alternate-qsum N" << endl
          << "                   Require at least this sum of quality of observations supporting" << endl
          << "                   an alternate allele within a single individual in order" << endl
@@ -171,26 +251,33 @@ void Parameters::usage(char** argv) {
          << "   -! --min-coverage N" << endl
          << "                   Require at least this coverage to process a site.  default: 0" << endl
          << endl
-         << "bayesian priors:" << endl
+         << "population priors:" << endl
          << endl
-         << "   -Y --no-ewens-priors" << endl
-         << "                   Turns off the Ewens' Sampling Formula component of the priors." << endl
          << "   -k --no-population-priors" << endl
-         << "                   Equivalent to --pooled --no-ewens-priors" << endl
-         << "   -w --hwe-priors Use the probability of the combination arising under HWE given" << endl
-         << "                   the allele frequency as estimated by observation frequency." << endl
+         << "                   Equivalent to --pooled-discrete and removal of Ewens Sampling" << endl
+	 << "                   Formula priors" << endl
          << endl
-         << "observation prior expectations:" << endl
+         << "mappability priors:" << endl
          << endl
-         << "   -V --binomial-obs-priors" << endl
-         << "                   Incorporate expectations about osbervations into the priors," << endl
+         << "   -w --hwe-priors-off" << endl
+	 << "                   Disable estimation of the probability of the combination" << endl
+	 << "                   arising under HWE given the allele frequency as estimated" << endl
+         << "                   by observation frequency." << endl
+         << "   -V --binomial-obs-priors-off" << endl
+         << "                   Disable incorporation of prior expectations about observations." << endl
          << "                   Uses read placement probability, strand balance probability," << endl
          << "                   and read position (5'-3') probability." << endl
-         << "   -a --allele-balance-priors" << endl
-         << "                   Use aggregate probability of observation balance between alleles" << endl
-         << "                   as a component of the priors.  Best for observations with minimal" << endl
-         << "                   inherent reference bias." << endl
+         << "   -a --allele-balance-priors-off" << endl
+         << "                   Disable use of aggregate probability of observation balance between alleles" << endl
+         << "                   as a component of the priors." << endl
          << endl
+	 << "genotype likelihoods:" << endl
+	 << endl
+	 << "   --observation-bias FILE" << endl
+	 << "                   Read length-dependent allele observation biases from FILE." << endl
+	 << "                   The format is [length] [alignment efficiency relative to reference]" << endl
+	 << "                   where the efficiency is 1 if there is no relative observation bias." << endl
+	 << endl
          << "algorithmic features:" << endl
          << endl
 	 << "   --report-genotype-likelihood-max" << endl
@@ -203,7 +290,7 @@ void Parameters::usage(char** argv) {
          << "                   to a low integer for improvide site selection at a slight" << endl
          << "                   performance penalty. default: 5." << endl
          << "   -B --genotyping-max-iterations N" << endl
-         << "                   Iterate no more than N times during genotyping step. default: 25." << endl
+         << "                   Iterate no more than N times during genotyping step. default: 1000." << endl
          << "   --genotyping-max-banddepth N" << endl
          << "                   Integrate no deeper than the Nth best genotype by likelihood when" << endl
          << "                   genotyping. default: 6." << endl
@@ -211,9 +298,6 @@ void Parameters::usage(char** argv) {
          << "                   Integrate all genotype combinations in our posterior space" << endl
          << "                   which include no more than N samples with their Mth best" << endl
          << "                   data likelihood. default: 1,3." << endl
-         << "   -K --no-permute" << endl
-         << "                   Do not scale prior probability of genotype combination given allele" << endl
-         << "                   frequency by the number of permutations of included genotypes." << endl
          << "   -N --exclude-unobserved-genotypes" << endl
          << "                   Skip sample genotypings for which the sample has no supporting reads." << endl
          << "   -S --genotype-variant-threshold N" << endl
@@ -222,13 +306,16 @@ void Parameters::usage(char** argv) {
          << "                   genotype likelihood for the sample.  default: ~unbounded" << endl
          << "   -j --use-mapping-quality" << endl
          << "                   Use mapping quality of alleles when calculating data likelihoods." << endl
+	 << "   -H --harmonic-indel-quality" << endl
+	 << "                   Use a weighted sum of base qualities around an indel, scaled by the" << endl
+	 << "                   distance from the indel.  By default use a minimum BQ in flanking sequence." << endl
          << "   -D --read-dependence-factor N" << endl
          << "                   Incorporate non-independence of reads by scaling successive" << endl
          << "                   observations by this factor during data likelihood" << endl
          << "                   calculations.  default: 0.9" << endl
-         << "   -= --no-marginals" << endl
-         << "                   Do not calculate the marginal probability of genotypes.  Saves" << endl
-         << "                   time and improves scaling performance in large populations." << endl
+         << "   -= --genotype-qualities" << endl
+         << "                   Calculate the marginal probability of genotypes and report as GQ in" << endl
+         << "                   each sample field in the VCF output." << endl
          << endl
          << "debugging:" << endl
          << endl
@@ -236,16 +323,17 @@ void Parameters::usage(char** argv) {
          << "   -dd             Print more verbose debugging output (requires \"make DEBUG\")" << endl
          << endl
          << endl
-         << "author:  Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010, 2011" << endl
-         << "date:    " << FREEBAYES_COMPILE_DATE << endl
-         << "version: " <<  FREEBAYES_VERSION << endl;
+         << "author:   Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010-2012" << endl
+         << "date:     " << FREEBAYES_COMPILE_DATE << endl
+         << "version:  " << FREEBAYES_VERSION << endl;
+
 }
 
 
 Parameters::Parameters(int argc, char** argv) {
 
     if (argc == 1) {
-        usage(argv);
+        simpleUsage(argv);
         exit(1);
     }
 
@@ -269,6 +357,7 @@ Parameters::Parameters(int argc, char** argv) {
     outputFile = "";
     traceFile = "";
     failedFile = "";
+    alleleObservationBiasFile = "";
 
     // operation parameters
     outputAlleles = false;          //
@@ -280,24 +369,26 @@ Parameters::Parameters(int argc, char** argv) {
     useRefAllele = false;           // .....
     diploidReference = false;      // -H --diploid-reference
     allowIndels = true;            // -i --no-indels
-    leftAlignIndels = false;       // -O --left-align-indels
+    leftAlignIndels = true;       // -O --dont-left-align-indels
     allowMNPs = true;            // -X --no-mnps
     allowSNPs = true;          // -I --no-snps
     allowComplex = true;
     maxComplexGap = 3;
-    pooled = false;                 // -J --pooled
+    pooledDiscrete = false;                 // -J --pooled
+    pooledContinuous = false;
     ewensPriors = true;
     permute = true;                // -K --permute
     useMappingQuality = false;
-    obsBinomialPriors = false; // TODO
-    hwePriors = false;
-    alleleBalancePriors = false;
+    useMinIndelQuality = true;
+    obsBinomialPriors = true;
+    hwePriors = true;
+    alleleBalancePriors = true;
     excludeUnobservedGenotypes = false;
     excludePartiallyObservedGenotypes = false;
     genotypeVariantThreshold = 0;
     siteSelectionMaxIterations = 5;
     reportGenotypeLikelihoodMax = false;
-    genotypingMaxIterations = 25;
+    genotypingMaxIterations = 1000;
     genotypingMaxBandDepth = 7;
     minPairedAltCount = 0;
     minAltMeanMapQ = 0;
@@ -308,8 +399,8 @@ Parameters::Parameters(int argc, char** argv) {
     ploidy = 2;                  // -p --ploidy
     MQL0 = 0;                    // -m --min-mapping-quality
     BQL0 = 0;                    // -q --min-base-quality
-    MQL1 = 0;                    // -R --min-supporting-quality MQ,BQ
-    BQL1 = 0;                    //
+    minSupportingAlleleQualitySum = 0;
+    minSupportingMappingQualitySum = 0;
     BQL2 = 10;                    // -Q --mismatch-base-quality-threshold
     RMU = 10000000;                     // -U --read-mismatch-limit
     readMaxMismatchFraction = 1.0;    //  -z --read-max-mismatch-fraction
@@ -317,17 +408,18 @@ Parameters::Parameters(int argc, char** argv) {
     readIndelLimit = 10000000;     // -e --read-indel-limit
     IDW = -1;                     // -x --indel-exclusion-window
     TH = 10e-3;              // -T --theta
-    PVL = 0.0001;             // -P --pvar
+    PVL = 0.0;             // -P --pvar
     RDF = 0.9;             // -D --read-dependence-factor
     diffusionPriorScalar = 1.0;     // -V --diffusion-prior-scalar
     WB = 1;                      // -W --posterior-integration-limits
     TB = 3;
     posteriorIntegrationDepth = 0;
-    calculateMarginals = true;
-    minAltFraction = 0.0;
-    minAltCount = 1;
+    calculateMarginals = false;
+    minAltFraction = 0.2;  // require 20% of reads from sample to be supporting the same alternate to consider
+    minAltCount = 2; // require 2 reads in same sample call
     minAltTotal = 1;
     minAltQSum = 0;
+    //minAltQSumTotal = 0;
     minCoverage = 0;
     debuglevel = 0;
     debug = false;
@@ -354,24 +446,25 @@ Parameters::Parameters(int argc, char** argv) {
         {"use-duplicate-reads", no_argument, 0, '4'},
         {"use-best-n-alleles", required_argument, 0, 'n'},
         {"use-reference-allele", no_argument, 0, 'Z'},
-        {"diploid-reference", no_argument, 0, 'H'},
+        {"harmonic-indel-quality", no_argument, 0, 'H'},
         {"standard-filters", no_argument, 0, '0'},
         {"reference-quality", required_argument, 0, '1'},
         {"ploidy", required_argument, 0, 'p'},
-        {"pooled", no_argument, 0, 'J'},
-        {"no-ewens-priors", no_argument, 0, 'Y'}, // TODO
+        {"pooled-discrete", no_argument, 0, 'J'},
+        {"pooled-continuous", no_argument, 0, 'K'},
         {"no-population-priors", no_argument, 0, 'k'},
         {"use-mapping-quality", no_argument, 0, 'j'},
         {"min-mapping-quality", required_argument, 0, 'm'},
         {"min-base-quality", required_argument, 0, 'q'},
-        {"min-supporting-quality", required_argument, 0, 'R'},
+        {"min-supporting-allele-qsum", required_argument, 0, 'R'},
+        {"min-supporting-mapping-qsum", required_argument, 0, 'Y'},
         {"mismatch-base-quality-threshold", required_argument, 0, 'Q'},
         {"read-mismatch-limit", required_argument, 0, 'U'},
         {"read-max-mismatch-fraction", required_argument, 0, 'z'},
         {"read-snp-limit", required_argument, 0, '$'},
         {"read-indel-limit", required_argument, 0, 'e'},
         {"no-indels", no_argument, 0, 'i'},
-        {"left-align-indels", no_argument, 0, 'O'},
+        {"dont-left-align-indels", no_argument, 0, 'O'},
         {"no-mnps", no_argument, 0, 'X'},
         {"no-complex", no_argument, 0, 'u'},
         {"max-complex-gap", required_argument, 0, 'E'},
@@ -380,19 +473,19 @@ Parameters::Parameters(int argc, char** argv) {
         {"theta", required_argument, 0, 'T'},
         {"pvar", required_argument, 0, 'P'},
         {"read-dependence-factor", required_argument, 0, 'D'},
-        {"binomial-obs-priors", no_argument, 0, 'V'},
-        {"allele-balance-priors", no_argument, 0, 'a'},
-        {"hwe-priors", no_argument, 0, 'w'},
+        {"binomial-obs-priors-off", no_argument, 0, 'V'},
+        {"allele-balance-priors-off", no_argument, 0, 'a'},
+        {"hwe-priors-off", no_argument, 0, 'w'},
         {"posterior-integration-limits", required_argument, 0, 'W'},
         {"min-alternate-fraction", required_argument, 0, 'F'},
         {"min-alternate-count", required_argument, 0, 'C'},
         //{"min-paired-alternate-count", required_argument, 0, 'Y'},
+	{"observation-bias", required_argument, 0, '%'},
         {"min-alternate-total", required_argument, 0, 'G'},
         //{"min-alternate-mean-mapq", required_argument, 0, 'k'},
         {"min-alternate-qsum", required_argument, 0, '3'},
         {"min-coverage", required_argument, 0, '!'},
-        {"no-permute", no_argument, 0, 'K'},
-        {"no-marginals", no_argument, 0, '='},
+        {"genotype-qualities", no_argument, 0, '='},
         {"variant-input", required_argument, 0, '@'},
         {"only-use-input-alleles", no_argument, 0, 'l'},
         {"show-reference-repeats", no_argument, 0, '_'},
@@ -413,7 +506,7 @@ Parameters::Parameters(int argc, char** argv) {
     while (true) {
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hcO4ZKjH0diN5aI_Yk=wluVXJb:G:M:x:@:A:f:t:r:s:v:n:B:p:m:q:R:Q:U:$:e:T:P:D:^:S:W:F:C:L:8:z:1:3:E:7:2:9:",
+        c = getopt_long(argc, argv, "hcO4ZKjH0diN5aI_k=wluVXJY:b:G:M:x:@:A:f:t:r:s:v:n:B:p:m:q:R:Q:U:$:e:T:P:D:^:S:W:F:C:L:8:z:1:3:E:7:2:9:%:",
                         long_options, &option_index);
 
         if (c == -1) // end of options
@@ -474,9 +567,9 @@ Parameters::Parameters(int argc, char** argv) {
                 outputFile = optarg;
                 break;
 
-            // -O --left-align-indels
+            // -O --dont-left-align-indels
             case 'O':
-                leftAlignIndels = true;
+                leftAlignIndels = false;
                 break;
 
             // -L --trace
@@ -533,17 +626,15 @@ Parameters::Parameters(int argc, char** argv) {
                 useRefAllele = true;
                 break;
 
-            // -H --diploid-reference
+            // -H --harmonic-indel-quality
             case 'H':
-                diploidReference = true;
+                useMinIndelQuality = false;
                 break;
 
             // -0 --standard-filters
             case '0':
 		MQL0 = 30;
 		BQL0 = 20;
-		MQL1 = 0;
-		BQL1 = 0;
                 break;
 
             // -M --expectation-maximization
@@ -605,9 +696,8 @@ Parameters::Parameters(int argc, char** argv) {
                 }
                 break;
 
-            // -J --pooled
             case 'J':
-                pooled = true;
+                pooledDiscrete = true;
                 break;
 
             // -m --min-mapping-quality
@@ -626,16 +716,20 @@ Parameters::Parameters(int argc, char** argv) {
                 }
                 break;
 
-            // -R --min-supporting-quality
+            // -R --min-supporting-allele-qsum
             case 'R':
-                if (!convert(split(optarg, ",").front(), MQL1)) {
-                    cerr << "could not parse min-supporting-quality MQ" << endl;
+                if (!convert(optarg, minSupportingAlleleQualitySum)) {
+                    cerr << "could not parse min-supporting-allele-qsum" << endl;
                     exit(1);
                 }
-                if (!convert(split(optarg, ",").back(), BQL1)) {
-                    cerr << "could not parse min-supporting-quality MQ" << endl;
+                break;
+
+            // -Y --min-supporting-mapping-quality
+            case 'Y':
+		if (!convert(optarg, minSupportingMappingQualitySum)) {
+                    cerr << "could not parse min-supporting-mapping-qsum" << endl;
                     exit(1);
-                }
+		}
                 break;
 
             // -N --exclude-unobserved-genotypes
@@ -742,18 +836,24 @@ Parameters::Parameters(int argc, char** argv) {
                 }
                 break;
 
+	    // -% --observation-bias
+	    case '%':
+		alleleObservationBiasFile = optarg;
+		break;
+
             // observation priors
             case 'V':
-                obsBinomialPriors = true;
+                obsBinomialPriors = false;
                 break;
 
             // allele balance
             case 'a':
-                alleleBalancePriors = true;
+                alleleBalancePriors = false;
                 break;
 
+	    // hwe expectations
             case 'w':
-                hwePriors = true;
+                hwePriors = false;
                 break;
 
             // -W --posterior-integration-limits
@@ -784,24 +884,18 @@ Parameters::Parameters(int argc, char** argv) {
                 }
                 break;
 
-            // -Y --no-ewens-priors
-            case 'Y':
-                ewensPriors = false;
-                break;
-
             // -k --no-population-priors
             case 'k':
-                pooled = true;
+                pooledDiscrete = true;
                 ewensPriors = false;
                 break;
 
-            // -K --no-permute
             case 'K':
-                permute = false;
+                pooledContinuous = true;
                 break;
 
             case '=':
-                calculateMarginals = false;
+                calculateMarginals = true;
                 break;
 
             case '@':

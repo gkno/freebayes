@@ -1,7 +1,7 @@
 // utility functions
 //
-#ifndef _UTILITY_H
-#define _UTILITY_H
+#ifndef UTILITY_H
+#define UTILITY_H
 
 #include <cmath>
 #include <vector>
@@ -14,8 +14,11 @@
 #include <map>
 #include <time.h>
 #include "convert.h"
+#include "ttmath.h"
 
 using namespace std;
+
+typedef ttmath::Big<TTMATH_BITS(256), TTMATH_BITS(512)> BigFloat;
 
 long double factorial(int);
 short qualityChar2ShortInt(char c);
@@ -29,6 +32,8 @@ long double ln2log10(long double prob);
 long double log102ln(long double prob);
 long double phred2float(int qual);
 long double float2phred(long double prob);
+long double big2phred(const BigFloat& prob);
+long double nan2zero(long double x);
 long double powln(long double m, int n);
 // here 'joint' means 'probability that we have a vector entirely composed of true bases'
 long double jointQuality(const std::vector<short>& quals);
@@ -46,6 +51,7 @@ bool allATGC(string& s);
 string strip(string const& str, char const* separators = " \t");
 
 int binomialCoefficient(int n, int k);
+long double binomialCoefficientLn(int k, int n);
 long double binomialProb(int k, int n, long double p);
 long double __binomialProbln(int k, int n, long double p);
 long double binomialProbln(int k, int n, long double p);
@@ -107,6 +113,9 @@ long double harmonicSum(int n);
 long double safedivide(long double a, long double b);
 
 long double safe_exp(long double ln);
+
+BigFloat big_exp(long double ln);
+
 long double logsumexp_probs(const vector<long double>& lnv);
 long double logsumexp(const vector<long double>& lnv);
 
@@ -132,5 +141,7 @@ string joinCigarList(const list<pair<int, string> >& cigar);
 bool isEmptyCigarElement(const pair<int, string>& elem);
 
 std::string operator*(std::string const &s, size_t n);
+
+void normalizeSumToOne(vector<long double>&);
 
 #endif

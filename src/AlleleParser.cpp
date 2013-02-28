@@ -406,6 +406,7 @@ string AlleleParser::vcfHeader() {
         // supplementary information about the site
         << "##INFO=<ID=ODDS,Number=1,Type=Float,Description=\"The log odds ratio of the best genotype combination to the second-best.\">" << endl
         << "##INFO=<ID=BVAR,Number=0,Type=Flag,Description=\"The best genotype combination in the posterior is variant (non homozygous).\">" << endl
+        << "##INFO=<ID=GTI,Number=1,Type=Integer,Description=\"Number of genotyping iterations required to reach convergence or bailout.\">" << endl
         //<< "##INFO=<ID=TS,Number=0,Type=Flag,Description=\"site has transition SNP\">" << endl
         //<< "##INFO=<ID=TV,Number=0,Type=Flag,Description=\"site has transversion SNP\">" << endl
         << "##INFO=<ID=CpG,Number=0,Type=Flag,Description=\"CpG site (either CpG, TpG or CpA)\">" << endl
@@ -440,7 +441,7 @@ string AlleleParser::vcfHeader() {
         << "##FORMAT=<ID=GQ,Number=1,Type=Float,Description=\"Genotype Quality, the Phred-scaled marginal (or unconditional) probability of the called genotype\">" << endl
         // this can be regenerated with RA, AA, QR, QA
         << "##FORMAT=<ID=GL,Number=G,Type=Float,Description=\"Genotype Likelihood, log10-scaled likelihoods of the data given the called genotype for each possible genotype generated from the reference and alternate alleles given the sample ploidy\">" << endl
-        << "##FORMAT=<ID=GLE,Number=1,Type=String,Description=\"Genotype Likelihood Explicit, same as GL, but with tags to indicate the specific genotype.  For instance, 0^-75.22|1^-223.42|0/0^-323.03|1/0^-99.29|1/1^-802.53 represents both haploid and diploid genotype likilehoods in a biallelic context\">" << endl
+	//<< "##FORMAT=<ID=GLE,Number=1,Type=String,Description=\"Genotype Likelihood Explicit, same as GL, but with tags to indicate the specific genotype.  For instance, 0^-75.22|1^-223.42|0/0^-323.03|1/0^-99.29|1/1^-802.53 represents both haploid and diploid genotype likilehoods in a biallelic context\">" << endl
         << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">" << endl
         << "##FORMAT=<ID=RO,Number=1,Type=Integer,Description=\"Reference allele observation count\">" << endl
         << "##FORMAT=<ID=QR,Number=1,Type=Integer,Description=\"Sum of quality of the reference observations\">" << endl
@@ -1109,7 +1110,10 @@ Allele AlleleParser::makeAllele(RegisteredAlignment& ra,
 	cigar = convert(length) + "N";
     }
 
-    string refSequence = currentSequence.substr(pos - currentSequenceStart, reflen);
+    string refSequence;
+    if (type != ALLELE_NULL) { // only used for non null allele, avoid soft clipping edge cases
+	refSequence = currentSequence.substr(pos - currentSequenceStart, reflen);
+    }
 
     long int repeatRightBoundary = pos;
 
@@ -1136,7 +1140,6 @@ Allele AlleleParser::makeAllele(RegisteredAlignment& ra,
 	// by adjusting the cigar, we implicitly adjust
 	// allele.referenceLength, which is calculated when the allele is made
 
-	// TODO, why are we getting complex alleles like 1X15M ?  this shouldn't be possible, where is the second polymorphism?
 	qualstr = string(length, qualityInt2Char(0));
 	readSequence = currentSequence.substr(pos - currentSequenceStart, length);
     }
@@ -1165,7 +1168,8 @@ Allele AlleleParser::makeAllele(RegisteredAlignment& ra,
 	    if (isRepeatUnit(alleleseq, repeatunit)) {
 		// determine the boundaries of the repeat
 		long int p = pos - currentSequenceStart;
-		size_t startpos = currentSequence.find(repeatstr, p - repeatstr.size() - 1); // adjust to ensure we hit the first of the repeatstr
+		// adjust to ensure we hit the first of the repeatstr
+		size_t startpos = currentSequence.find(repeatstr, max((long int) 0, p - (long int) repeatstr.size() - 1));
 		long int leftbound = startpos + currentSequenceStart;
 		if (startpos == string::npos) {
 		    cerr << "could not find repeat sequence?" << endl;
@@ -1183,7 +1187,7 @@ Allele AlleleParser::makeAllele(RegisteredAlignment& ra,
 	    }
 	}
     }
-    
+
     return Allele(type,
 		  currentSequenceName,
 		  pos,
@@ -1474,7 +1478,7 @@ RegisteredAlignment& AlleleParser::registerAlignment(BamAlignment& alignment, Re
 				   sampleName,
 				   alignment,
 				   sequencingTech,
-				   alignment.MapQuality,
+				   alignment.MapQuality, // ... hmm
 				   qualstr),
 			parameters.allowComplex, parameters.maxComplexGap);
                 }
@@ -1511,18 +1515,22 @@ RegisteredAlignment& AlleleParser::registerAlignment(BamAlignment& alignment, Re
 
             string qualstr = rQual.substr(spanstart, L);
 
-            // quality, scaled inversely by the ratio between the quality
-            // string length and the length of the event
-            long double qual = sumQuality(qualstr);
-
-            // quality adjustment:
-            // scale the quality by the inverse harmonic sum of the length of
-            // the quality string X a scaling constant derived from the ratio
-            // between the length of the quality string and the length of the
-            // allele
-            //qual += ln2phred(log((long double) l / (long double) L));
-            qual += ln2phred(log((long double) L / (long double) l));
-            qual /= harmonicSum(l);
+            long double qual;
+	    if (parameters.useMinIndelQuality) {
+		qual = minQuality(qualstr);
+	    } else {
+		// quality, scaled inversely by the ratio between the quality
+		// string length and the length of the event
+		qual = sumQuality(qualstr);
+		// quality adjustment:
+		// scale the quality by the inverse harmonic sum of the length of
+		// the quality string X a scaling constant derived from the ratio
+		// between the length of the quality string and the length of the
+		// allele
+		//qual += ln2phred(log((long double) l / (long double) L));
+		qual += ln2phred(log((long double) L / (long double) l));
+		qual /= harmonicSum(l);
+	    }
 
             if (qual >= parameters.BQL2) {
                 ra.mismatches += l;
@@ -1582,18 +1590,22 @@ RegisteredAlignment& AlleleParser::registerAlignment(BamAlignment& alignment, Re
 
             string qualstr = rQual.substr(spanstart, L);
 
-            // quality, scaled inversely by the ratio between the quality
-            // string length and the length of the event
-            long double qual = sumQuality(qualstr);
-
-            // quality adjustment:
-            // scale the quality by the inverse harmonic sum of the length of
-            // the quality string X a scaling constant derived from the ratio
-            // between the length of the quality string and the length of the
-            // allele
-            //qual += ln2phred(log((long double) l / (long double) L));
-            qual += ln2phred(log((long double) L / (long double) l));
-            qual /= harmonicSum(l);
+            long double qual;
+	    if (parameters.useMinIndelQuality) {
+		qual = minQuality(qualstr);
+	    } else {
+		// quality, scaled inversely by the ratio between the quality
+		// string length and the length of the event
+		qual = sumQuality(qualstr);
+		// quality adjustment:
+		// scale the quality by the inverse harmonic sum of the length of
+		// the quality string X a scaling constant derived from the ratio
+		// between the length of the quality string and the length of the
+		// allele
+		//qual += ln2phred(log((long double) l / (long double) L));
+		qual += ln2phred(log((long double) L / (long double) l));
+		qual /= harmonicSum(l);
+	    }
 
             if (qual >= parameters.BQL2) {
                 ra.mismatches += l;
@@ -1624,23 +1636,27 @@ RegisteredAlignment& AlleleParser::registerAlignment(BamAlignment& alignment, Re
 
         // handle other cigar element types
         } else if (t == 'S') { // soft clip, clipped sequence present in the read not matching the reference
-	    string qualstr = rQual.substr(rp, l);
-	    string readseq = alignment.QueryBases.substr(rp, l);
-            // skip these bases in the read
-	    ra.addAllele(
-		makeAllele(ra,
-			   ALLELE_NULL,
-			   sp - l,
-			   l,
-			   rp - l, // bases left
-			   alignment.QueryBases.size() - rp, // bases right
-			   readseq,
-			   sampleName,
-			   alignment,
-			   sequencingTech,
-			   alignment.MapQuality,
-			   qualstr),
-		parameters.allowComplex, parameters.maxComplexGap);
+	    if (sp - l < 0) {
+		// nothing to do, soft clip is beyond the beginning of the reference
+	    } else {
+		string qualstr = rQual.substr(rp, l);
+		string readseq = alignment.QueryBases.substr(rp, l);
+		// skip these bases in the read
+		ra.addAllele(
+		    makeAllele(ra,
+			       ALLELE_NULL,
+			       sp - l,
+			       l,
+			       rp - l, // bases left
+			       alignment.QueryBases.size() - rp, // bases right
+			       readseq,
+			       sampleName,
+			       alignment,
+			       sequencingTech,
+			       alignment.MapQuality,
+			       qualstr),
+		    parameters.allowComplex, parameters.maxComplexGap);
+	    }
             rp += l;// sp += l; csp += l;
         } else if (t == 'H') { // hard clip on the read, clipped sequence is not present in the read
             // the alignment position is the first non-clipped base.
@@ -2027,6 +2043,7 @@ void AlleleParser::updateInputVariants(void) {
                             p = a;
                         }
                         alleles = newAlleles;
+                        DEBUG2("alleles, post addition of reference sequences: " << alleles);
                     }
 
                     // for any deletion alleles, grap the previous base (per standards in VCF and the rest of the parsing)
@@ -2051,6 +2068,19 @@ void AlleleParser::updateInputVariants(void) {
                             }
                         }
                         p = a;
+                    }
+		    DEBUG2("alleles, post processing of deletions: " << alleles);
+
+		    // remove 0-length alleles resulting from edge cases in previous processing (e.g. beginning of read)
+                    if (alleles.size() > 1) {
+                        vector<Allele> newAlleles;
+                        for (vector<Allele>::iterator a = alleles.begin(); a != alleles.end(); ++a) {
+			    if (a->referenceLength > 0) {
+				newAlleles.push_back(*a);
+                            }
+                        }
+                        alleles = newAlleles;
+                        DEBUG2("alleles, post removal of 0-length alleles: " << alleles);
                     }
 
                     Allele& allele = alleles.front();
@@ -2547,7 +2577,7 @@ bool AlleleParser::toNextPosition(void) {
 
     if (!targets.empty() && (
                 (!parameters.allowIndels && currentPosition >= currentTarget->right)
-                || currentPosition > currentTarget->right - 1)) { // time to move to a new target
+                || currentPosition > currentTarget->right)) { // time to move to a new target
         DEBUG("next position " << (long int) currentPosition + 1 <<  " outside of current target right bound " << currentTarget->right + 1);
         if (!toNextTarget()) {
             DEBUG("no more targets, finishing");
@@ -2811,7 +2841,7 @@ void AlleleParser::buildHaplotypeAlleles(vector<Allele>& alleles, Samples& sampl
             for (vector<Allele>::iterator a = alleles.begin(); a != alleles.end(); ++a) {
                 Allele& allele = *a;
 		if (!allele.isReference()) {
-		    long int hapend = max(allele.position + allele.referenceLength,
+		    long int hapend = max((long int) (allele.position + allele.referenceLength),
 					  allele.repeatRightBoundary);
 		    if (hapend > currentPosition + haplotypeLength) {
 			haplotypeLength = hapend - currentPosition;
@@ -3091,15 +3121,14 @@ vector<Allele> AlleleParser::genotypeAlleles(
         }
         bool passesFilters = false;
         int qSum = 0;
+	int mqSum = 0;
         for (vector<Allele*>::iterator a = alleles.begin(); a != alleles.end(); ++a) {
             DEBUG2("allele " << **a);
             Allele& allele = **a;
             qSum += allele.quality;
-            if (!passesFilters && allele.quality >= parameters.BQL1 && allele.mapQuality >= parameters.MQL1) {
-                passesFilters = true;
-            }
+	    mqSum += allele.mapQuality;
         }
-        if (passesFilters) {
+        if (qSum >= parameters.minSupportingAlleleQualitySum && mqSum >= parameters.minSupportingMappingQualitySum) {
             Allele& allele = *(alleles.front());
             int length = allele.length;
             int reflength = allele.referenceLength;

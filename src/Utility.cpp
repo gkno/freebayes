@@ -54,6 +54,18 @@ long double float2phred(long double prob) {
         return p;
 }
 
+long double big2phred(const BigFloat& prob) {
+    return -10 * (long double) (ttmath::Log(prob, (BigFloat)10)).ToDouble();
+}
+
+long double nan2zero(long double x) {
+    if (x != x) {
+	return 0;
+    } else {
+	return x;
+    }
+}
+
 long double powln(long double m, int n) {
     return m * n;
 }
@@ -178,6 +190,10 @@ long double binomialProb(int k, int n, long double p) {
 
 long double __binomialProbln(int k, int n, long double p) {
     return factorialln(n) - (factorialln(k) + factorialln(n - k)) + powln(log(p), k) + powln(log(1 - p), n - k);
+}
+
+long double binomialCoefficientLn(int k, int n) {
+    return factorialln(n) - (factorialln(k) + factorialln(n - k));
 }
 
 BinomialCache binomialCache;
@@ -313,6 +329,13 @@ long double safe_exp(long double ln) {
     }
 }
 
+BigFloat big_exp(long double ln) {
+    BigFloat x, result;
+    x.FromDouble(ln);
+    result = ttmath::Exp(x);
+    return result;
+}
+
 // 'safe' log summation for probabilities
 long double logsumexp_probs(const vector<long double>& lnv) {
     vector<long double>::const_iterator i = lnv.begin();
@@ -322,11 +345,14 @@ long double logsumexp_probs(const vector<long double>& lnv) {
         if (*i > maxN)
             maxN = *i;
     }
-    long double sum = 0;
+    BigFloat sum = 0;
     for (vector<long double>::const_iterator i = lnv.begin(); i != lnv.end(); ++i) {
-        sum += safe_exp(*i - maxN);
+        sum += big_exp(*i - maxN);
     }
-    return maxN + log(sum);
+    BigFloat maxNb; maxNb.FromDouble(maxN);
+    BigFloat bigResult = maxNb + ttmath::Ln(sum);
+    long double result;
+    return bigResult.ToDouble();
 }
 
 // unsafe, kept for potential future use
@@ -627,4 +653,15 @@ std::string operator*(std::string const &s, size_t n)
     for (size_t i=0; i<n; i++)
         r += s;
     return r;
+}
+
+// normalize vector sum to 1
+void normalizeSumToOne(vector<long double>& v) {
+    long double sum = 0;
+    for (vector<long double>::iterator i = v.begin(); i != v.end(); ++i) {
+	sum += *i;
+    }
+    for (vector<long double>::iterator i = v.begin(); i != v.end(); ++i) {
+	*i /= sum;
+    }
 }
