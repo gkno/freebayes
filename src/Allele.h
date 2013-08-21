@@ -13,8 +13,10 @@
 #include <assert.h>
 #include "Utility.h"
 #include "convert.h"
+#include "api/BamAlignment.h"
 
 using namespace std;
+using namespace BamTools;
 
 class Allele;
 
@@ -109,13 +111,12 @@ public:
     unsigned int length;    // and event length (deletion implies 0, snp implies 1, insertion >1)
     unsigned int referenceLength; // length of the event relative to the reference
     long int repeatRightBoundary;  // if this allele is an indel, and if it is embedded in a tandem repeat 
-    int bpLeft; // how many bases are in the read to the left of the allele
-    int bpRight; // how many bases are in the read to the left of the allele
     // TODO cleanup
     int basesLeft;  // these are the "updated" versions of the above
     int basesRight;
     AlleleStrand strand;          // strand, true = +, false = -
     string sampleID;        // representative sample ID
+    string readGroupID;     // read group membership
     string readID;          // id of the read which the allele is drawn from
     vector<short> baseQualities;
     long double quality;          // base quality score associated with this allele, updated every position in the case of reference alleles
@@ -130,50 +131,52 @@ public:
     bool isPaired;  // if the allele is supported by a read that is part of a pair
     bool isMateMapped;  // if the mate in the pair is mapped
     bool genotypeAllele;    // if this is an abstract 'genotype' allele
-    vector<bool> indelMask; // indel mask structure, masks sites within the IDW from indels
-    const bool masked(void) const;      // if the allele is masked at the *currentReferencePosition
     bool processed; // flag to mark if we've presented this allele for analysis
     string cigar; // a cigar representation of the allele
     vector<Allele>* alignmentAlleles;
+    long int alignmentStart;
+    long int alignmentEnd;
 
     // default constructor, for converting alignments into allele observations
     Allele(AlleleType t, 
-	   string& refname,
-	   long int pos, 
-	   long int* crefpos,
-	   char* crefbase,
-	   unsigned int len,
-	   long int rrbound,
-	   int bleft,
-	   int bright,
-	   string alt,
-	   string& sampleid,
-	   string& readid,
-	   string& sqtech,
-	   bool strnd, 
-	   long double qual,
-	   string qstr, 
-	   short mapqual,
-	   bool ispair,
-	   bool ismm,
-	   bool isproppair,
-	   string cigarstr,
-	   vector<Allele>* ra)
+           string& refname,
+           long int pos, 
+           long int* crefpos,
+           char* crefbase,
+           unsigned int len,
+           long int rrbound,
+           int bleft,
+           int bright,
+           string alt,
+           string& sampleid,
+           string& readid,
+           string& readgroupid,
+           string& sqtech,
+           bool strnd, 
+           long double qual,
+           string qstr, 
+           short mapqual,
+           bool ispair,
+           bool ismm,
+           bool isproppair,
+           string cigarstr,
+           vector<Allele>* ra,
+           long int bas,
+           long int bae)
         : type(t)
         , referenceName(refname)
         , position(pos)
         , currentReferencePosition(crefpos)
         , currentReferenceBase(crefbase)
         , length(len)
-	, repeatRightBoundary(rrbound)
-        , bpLeft(bleft)
+        , repeatRightBoundary(rrbound)
         , basesLeft(bleft)
-        , bpRight(bright)
         , basesRight(bright)
         , currentBase(alt)
         , alternateSequence(alt)
         , sampleID(sampleid)
         , readID(readid)
+        , readGroupID(readgroupid)
         , sequencingTechnology(sqtech)
         , strand(strnd ? STRAND_FORWARD : STRAND_REVERSE)
         , quality((qual == -1) ? averageQuality(qstr) : qual) // passing -1 as quality triggers this calculation
@@ -190,6 +193,8 @@ public:
         , readSNPRate(0)
         , cigar(cigarstr)
         , alignmentAlleles(ra)
+        , alignmentStart(bas)
+        , alignmentEnd(bae)
     {
 
         baseQualities.resize(qstr.size()); // cache qualities
@@ -211,7 +216,7 @@ public:
         , alternateSequence(alt)
         , length(len)
         , referenceLength(reflen)
-	, repeatRightBoundary(rrbound)
+        , repeatRightBoundary(rrbound)
         , quality(0)
         , lnquality(1)
         , position(pos)
@@ -221,6 +226,7 @@ public:
         , readSNPRate(0)
         , cigar(cigarStr)
         , alignmentAlleles(NULL)
+        , processed(false)
     {
         currentBase = base();
         baseQualities.assign(alternateSequence.size(), 0);
@@ -246,7 +252,8 @@ public:
     //const int basesLeft(void) const; // returns the bases left within the read of the current position within the allele
     //const int basesRight(void) const; // returns the bases right within the read of the current position within the allele
     bool sameSample(Allele &other);  // if the other allele has the same sample as this one
-    void update(void); // for reference alleles, updates currentBase and quality
+    void update(int haplotypeLength = 1); // for reference alleles, updates currentBase and quality
+    void setQuality(void); // sets 'current quality' for alleles
     // TODO update this to reflect different insertions (e.g. IATGC instead of I4)
     const string base(void) const;  // the 'current' base of the allele or a string describing the allele, e.g. I10 or D2
                                     //  this is used to update cached data in the allele prior to presenting the allele for analysis
@@ -283,6 +290,8 @@ public:
     void mergeAllele(const Allele& allele, AlleleType newType);
 
     void updateTypeAndLengthFromCigar(void);
+    int bpLeft(void); // how many bases are in the read to the left of the allele
+    int bpRight(void); // how many bases are in the read to the left of the allele
 
 
 };
@@ -310,7 +319,6 @@ void groupAllelesBySample(list<Allele*>& alleles, map<string, vector<Allele*> >&
 
 int allowedAlleleTypes(vector<AlleleType>& allowedEnumeratedTypes);
 void filterAlleles(list<Allele*>& alleles, int allowedTypes);
-void removeIndelMaskedAlleles(list<Allele*>& alleles, long int position);
 int countAlleles(map<string, vector<Allele*> >& sampleGroups);
 int baseCount(vector<Allele*>& alleles, string base, AlleleStrand strand);
 pair<pair<int, int>, pair<int, int> >
@@ -336,7 +344,7 @@ bool allelesSameSample(Allele &a, Allele &b);
 bool allelesEqual(Allele &a, Allele &b);
 
 void groupAlleles(map<string, vector<Allele*> >& sampleGroups, map<string, vector<Allele*> >& alleleGroups);
-void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups);
+void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refseq);
 void resetProcessedFlag(map<string, vector<Allele*> >& alleleGroups);
 
 vector<Allele> alleleUnion(vector<Allele>& a1, vector<Allele>& a2);

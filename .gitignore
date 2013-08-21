@@ -1,2 +1,11 @@
 test/
 bugs/
+*.bak
+*.patch
+*~
+.Rhistory
+simulation
+src/libbamtools.a
+performance
+math
+.DS_Store

@@ -11,6 +11,7 @@
 #include <string>
 #include <float.h>
 #include <iostream>
+#include <fstream>
 #include <map>
 #include <time.h>
 #include "convert.h"
@@ -18,7 +19,7 @@
 
 using namespace std;
 
-typedef ttmath::Big<TTMATH_BITS(256), TTMATH_BITS(512)> BigFloat;
+typedef ttmath::Big<TTMATH_BITS(256), TTMATH_BITS(64)> BigFloat;
 
 long double factorial(int);
 short qualityChar2ShortInt(char c);
@@ -42,7 +43,9 @@ std::vector<short> qualities(const std::string& qualstr);
 // 
 long double sumQuality(const std::string& qualstr);
 long double minQuality(const std::string& qualstr);
+short minQuality(const std::vector<short>& qualities);
 long double averageQuality(const std::string& qualstr);
+long double averageQuality(const std::vector<short>& qualities);
 //unsigned int factorial(int n);
 bool stringInVector(string item, vector<string> items);
 int upper(int c); // helper to below, wraps toupper
@@ -62,7 +65,7 @@ long double poissonPvalLn(int a, int b);
 
 long double gammaln( long double x);
 long double factorial( int n);
-long double factorialln( int n);
+double factorialln( int n);
 long double __factorialln( int n);
 
 #define MAX_FACTORIAL_CACHE_SIZE 100000
@@ -143,5 +146,7 @@ bool isEmptyCigarElement(const pair<int, string>& elem);
 std::string operator*(std::string const &s, size_t n);
 
 void normalizeSumToOne(vector<long double>&);
+
+void addLinesFromFile(vector<string>& v, const string& f);
 
 #endif

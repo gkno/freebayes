@@ -10,7 +10,7 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include "split.h"
-#include "Version.h"
+#include "version_git.h"
 #include "Utility.h"
 
 using namespace std;
@@ -40,8 +40,14 @@ public:
     string variantPriorsFile;
     string haplotypeVariantFile;
     bool reportAllHaplotypeAlleles;
+    bool reportMonomorphic;
+    bool boundIndels;
     bool onlyUseInputAlleles;
     string alleleObservationBiasFile;
+    bool standardGLs;
+    int baseQualityCap;
+    double probContamination;
+    string contaminationEstimateFile;
 
     // operation parameters
     bool outputAlleles;          //  unused...
@@ -57,6 +63,7 @@ public:
     bool allowMNPs;              // -X --allow-mnps
     bool allowComplex;           // -X --allow-complex
     int maxComplexGap;
+    bool usePartialObservations;
     bool allowSNPs;              // -I --no-snps
     bool pooledDiscrete;
     bool pooledContinuous;
@@ -97,7 +104,7 @@ public:
     int posteriorIntegrationDepth;
     bool calculateMarginals;
     string algorithm;
-    long double RDF;             // -D --read-dependence-factor
+    double RDF;             // -D --read-dependence-factor
     long double diffusionPriorScalar; // -V --diffusion-prior-scalar
     int WB;                      // -W --posterior-integration-bandwidth
     // XXX adjusting this to anything other than 1 may have bad consequences

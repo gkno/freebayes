@@ -6,23 +6,25 @@ using namespace std;
 
 
 vcf::Variant& Results::vcf(
-        vcf::Variant& var, // variant to update
-        BigFloat pHom,
-        long double bestComboOddsRatio,
-        //long double alleleSamplingProb,
-        Samples& samples,
-        string refbase,
-        vector<Allele>& altAllelesIncludingNulls,
-        map<string, int> repeats,
+    vcf::Variant& var, // variant to update
+    BigFloat pHom,
+    long double bestComboOddsRatio,
+    //long double alleleSamplingProb,
+    Samples& samples,
+    string refbase,
+    vector<Allele>& altAllelesIncludingNulls,
+    map<string, int> repeats,
 	int genotypingIterations,
-        vector<string>& sampleNames,
-        int coverage,
-        GenotypeCombo& genotypeCombo,
-        bool bestOverallComboIsHet,
-        map<string, vector<Allele*> >& alleleGroups,
-        map<int, vector<Genotype> >& genotypesByPloidy,
-        vector<string>& sequencingTechnologies,
-        AlleleParser* parser) {
+    vector<string>& sampleNames,
+    int coverage,
+    GenotypeCombo& genotypeCombo,
+    bool bestOverallComboIsHet,
+    map<string, vector<Allele*> >& alleleGroups,
+    map<string, vector<Allele*> >& partialObservationGroups,
+    map<Allele*, set<Allele*> >& partialObservationSupport,
+    map<int, vector<Genotype> >& genotypesByPloidy,
+    vector<string>& sequencingTechnologies,
+    AlleleParser* parser) {
 
     Parameters& parameters = parser->parameters;
 
@@ -56,7 +58,7 @@ vcf::Variant& Results::vcf(
         if (cigar.back().second == "M") {
             endmatch = cigar.back().first;
         }
-	// check excludes complex alleles of the form, e.g. 1X3I
+        // check excludes complex alleles of the form, e.g. 1X3I
         if (cigar.size() > 1 && cigar.front().second == "M" && (cigar.at(1).second == "D" || cigar.at(1).second == "I")) {
             startmatch -= 1; // require at least one base flanking deletions
         }
@@ -107,29 +109,29 @@ vcf::Variant& Results::vcf(
 
         Allele& altAllele = *aa;
         switch (altAllele.type) {
-            case ALLELE_SNP:
-            case ALLELE_REFERENCE:
-            case ALLELE_MNP:
-                if (var.ref.size() < altAllele.referenceLength) {
-                    var.ref = parser->referenceSubstr(referencePosition, altAllele.referenceLength);
-                }
-                break;
-            case ALLELE_DELETION:
-                // extend the reference sequence
-                if (var.ref.size() < altAllele.referenceLength) {
-                    var.ref = parser->referenceSubstr(referencePosition, altAllele.referenceLength);
-                }
-                break;
-            case ALLELE_INSERTION:
-                break;
-            case ALLELE_COMPLEX:
-                if (var.ref.size() < altAllele.referenceLength) {
-                    var.ref = parser->referenceSubstr(referencePosition, altAllele.referenceLength);
-                }
-                break;
-            default:
-                cerr << "Unhandled allele type: " << altAllele.typeStr() << endl;
-                break;
+        case ALLELE_SNP:
+        case ALLELE_REFERENCE:
+        case ALLELE_MNP:
+            if (var.ref.size() < altAllele.referenceLength) {
+                var.ref = parser->referenceSubstr(referencePosition, altAllele.referenceLength);
+            }
+            break;
+        case ALLELE_DELETION:
+            // extend the reference sequence
+            if (var.ref.size() < altAllele.referenceLength) {
+                var.ref = parser->referenceSubstr(referencePosition, altAllele.referenceLength);
+            }
+            break;
+        case ALLELE_INSERTION:
+            break;
+        case ALLELE_COMPLEX:
+            if (var.ref.size() < altAllele.referenceLength) {
+                var.ref = parser->referenceSubstr(referencePosition, altAllele.referenceLength);
+            }
+            break;
+        default:
+            cerr << "Unhandled allele type: " << altAllele.typeStr() << endl;
+            break;
         }
 
     }
@@ -138,22 +140,22 @@ vcf::Variant& Results::vcf(
         Allele& altAllele = *aa;
         string altseq;
         switch (altAllele.type) {
-            case ALLELE_REFERENCE:
-                break;
-            case ALLELE_SNP:
-            case ALLELE_MNP:
-                altseq = var.ref;
-                altseq.replace(0, altAllele.alternateSequence.size(), altAllele.alternateSequence);
-                var.alt.push_back(altseq);
-                break;
-            case ALLELE_DELETION:
-            case ALLELE_INSERTION: // XXX is this correct???
-            case ALLELE_COMPLEX:
-                var.alt.push_back(altAllele.alternateSequence);
-                break;
-            default:
-                cerr << "Unhandled allele type: " << altAllele.typeStr() << endl;
-                break;
+        case ALLELE_REFERENCE:
+            break;
+        case ALLELE_SNP:
+        case ALLELE_MNP:
+            altseq = var.ref;
+            altseq.replace(0, altAllele.alternateSequence.size(), altAllele.alternateSequence);
+            var.alt.push_back(altseq);
+            break;
+        case ALLELE_DELETION:
+        case ALLELE_INSERTION: // XXX is this correct???
+        case ALLELE_COMPLEX:
+            var.alt.push_back(altAllele.alternateSequence);
+            break;
+        default:
+            cerr << "Unhandled allele type: " << altAllele.typeStr() << endl;
+            break;
         }
     }
 
@@ -161,10 +163,10 @@ vcf::Variant& Results::vcf(
     for (vector<string>::iterator a = var.alt.begin(); a != var.alt.end(); ++a) {
         assert(!a->empty());
         if (*a == var.ref) {
-	    cerr << "variant at " << parser->currentSequenceName << ":" << referencePosition + 1 << endl;
-	    cerr << "alt is the same as the reference" << endl;
-	    cerr << *a << " == " << var.ref << endl;
-	}
+            cerr << "variant at " << parser->currentSequenceName << ":" << referencePosition + 1 << endl;
+            cerr << "alt is the same as the reference" << endl;
+            cerr << *a << " == " << var.ref << endl;
+        }
     }
 
 
@@ -179,7 +181,7 @@ vcf::Variant& Results::vcf(
     var.id = ".";
     var.filter = ".";
     // XXX this should be the size of the maximum deletion + 1bp on the left end
-    var.quality = nan2zero(big2phred(pHom));
+    var.quality = max((long double) 0, nan2zero(big2phred(pHom)));
 
 
     // set up format string
@@ -270,9 +272,12 @@ vcf::Variant& Results::vcf(
         // count alternate alleles in the best genotyping
         unsigned int alternateCount = 0;
         unsigned int alleleCount = 0;
+        double alternateQualitySum = 0;
+        double partialObservationCount = 0;
+        double partialObservationQualitySum;
         // reference / alternate base counts by strand
-        map<string, unsigned int> altCountBySample;
-        map<string, unsigned int> altQualBySample;
+        //map<string, unsigned int> altCountBySample;
+        //map<string, unsigned int> altQualBySample;
         // het counts
         unsigned int hetReferenceObsCount = 0;
         unsigned int hetOtherObsCount = 0;
@@ -310,6 +315,7 @@ vcf::Variant& Results::vcf(
 
                 unsigned int altCount = sample.observationCount(altbase);
                 unsigned int refCount = sample.observationCount(refbase);
+
                 if (!genotype->homozygous) {
                     // het case
                     if (altCount > 0) {
@@ -337,9 +343,9 @@ vcf::Variant& Results::vcf(
                         refSampleObsCount += observationCount;
                     }
                 }
-                altCountBySample[*sampleName] = altCount;
+                //altCountBySample[*sampleName] = altCount;
 
-                altQualBySample[*sampleName] = sample.qualSum(altbase);
+                //altQualBySample[*sampleName] = sample.qualSum(altbase);
 
                 pair<pair<int,int>, pair<int,int> > baseCounts = sample.baseCount(refbase, altbase);
                 baseCountsForwardBySample[*sampleName] = baseCounts.first;
@@ -365,9 +371,11 @@ vcf::Variant& Results::vcf(
         unsigned int altObsCount = 0;
         map<string, int> altObsBySequencingTechnology;
 
+        // TODO we need a partial obs structure to annotate partial obs
         map<string, vector<Allele*> >::iterator f = alleleGroups.find(altbase);
         if (f != alleleGroups.end()) {
             vector<Allele*>& alternateAlleles = alleleGroups.at(altbase);
+            // TODO XXX XXX adjust to use partial observations
             altObsCount = alternateAlleles.size();
             for (vector<Allele*>::iterator app = alternateAlleles.begin(); app != alternateAlleles.end(); ++app) {
                 Allele& allele = **app;
@@ -399,14 +407,7 @@ vcf::Variant& Results::vcf(
                 }
                 altmqsum += allele.mapQuality;
             }
-        } /*else {
-            cerr << "couldn't find altbase: " << altbase << " in allele groups" << endl;
-            for (map<string, vector<Allele*> >::iterator a = alleleGroups.begin(); a != alleleGroups.end(); ++a) {
-                cerr << a->first << " " << a->second.size() << endl;
-            }
-            assert(false);
         }
-        */
 
         long double altReadMismatchRate = (altObsCount == 0 ? 0 : altReadMismatchSum / altObsCount);
         long double altReadSNPRate = (altObsCount == 0 ? 0 : altReadSNPSum / altObsCount);
@@ -431,22 +432,21 @@ vcf::Variant& Results::vcf(
         var.info["AN"].clear(); var.info["AN"].push_back(convert(alleleCount)); // XXX hack...
         var.info["AF"].push_back(convert((alleleCount == 0) ? 0 : (double) alternateCount / (double) alleleCount));
         var.info["AO"].push_back(convert(altObsCount));
+        var.info["PAO"].push_back(convert(samples.partialObservationCount(altbase)));
+        var.info["QA"].push_back(convert(samples.qualSum(altbase)));
+        var.info["PQA"].push_back(convert(samples.partialQualSum(altbase)));
         if (homRefSamples > 0 && hetAltSamples + homAltSamples > 0) {
             double altSampleAverageDepth = (double) altSampleObsCount
-                       / ( (double) hetAltSamples + (double) homAltSamples );
+                / ( (double) hetAltSamples + (double) homAltSamples );
             double refSampleAverageDepth = (double) refSampleObsCount / (double) homRefSamples;
             var.info["DPRA"].push_back(convert(altSampleAverageDepth / refSampleAverageDepth));
         } else {
             var.info["DPRA"].push_back(convert(0));
         }
-            //<< "HETAR=" << hetAltSamples << ";"
-            //<< "HOMA=" << homAltSamples << ";"
-            //<< "HOMR=" << homRefSamples << ";"
+
         var.info["SRP"].clear(); // XXX hack
         var.info["SRP"].push_back(convert((refObsCount == 0) ? 0 : nan2zero(ln2phred(hoeffdingln(baseCountsForwardTotal.first, refObsCount, 0.5)))));
         var.info["SAP"].push_back(convert((altObsCount == 0) ? 0 : nan2zero(ln2phred(hoeffdingln(baseCountsForwardTotal.second, altObsCount, 0.5)))));
-            //<< "ABR=" << hetReferenceObsCount <<  ";"
-            //<< "ABA=" << hetAlternateObsCount <<  ";"
         var.info["AB"].push_back(convert((hetAllObsCount == 0) ? 0 : nan2zero((double) hetAlternateObsCount / (double) hetAllObsCount )));
         var.info["ABP"].push_back(convert((hetAllObsCount == 0) ? 0 : nan2zero(ln2phred(hoeffdingln(hetAlternateObsCount, hetAllObsCount, 0.5)))));
         var.info["RUN"].push_back(convert(parser->homopolymerRunLeft(altbase) + 1 + parser->homopolymerRunRight(altbase)));
@@ -458,9 +458,9 @@ vcf::Variant& Results::vcf(
         var.info["MEANALT"].push_back(convert((hetAltSamples + homAltSamples == 0) ? 0 : nan2zero((double) uniqueAllelesInAltSamples / (double) (hetAltSamples + homAltSamples))));
 
         for (vector<string>::iterator st = sequencingTechnologies.begin();
-                st != sequencingTechnologies.end(); ++st) { string& tech = *st;
+             st != sequencingTechnologies.end(); ++st) { string& tech = *st;
             var.info["technology." + tech].push_back(convert((altObsCount == 0) ? 0
-							     : nan2zero((double) altObsBySequencingTechnology[tech] / (double) altObsCount )));
+                                                             : nan2zero((double) altObsBySequencingTechnology[tech] / (double) altObsCount )));
         }
 
         if (bestOverallComboIsHet) {
@@ -496,6 +496,7 @@ vcf::Variant& Results::vcf(
 
 
         // samples
+        /*
         for (vector<string>::iterator sn = sampleNames.begin(); sn != sampleNames.end(); ++sn) {
             string& sampleName = *sn;
             GenotypeComboMap::iterator gc = comboMap.find(sampleName);
@@ -506,11 +507,12 @@ vcf::Variant& Results::vcf(
 
                 map<string, vector<string> >& sampleOutput = var.samples[sampleName];
 
-                sampleOutput["AO"].push_back(convert(altCountBySample[sampleName]));
-                sampleOutput["QA"].push_back(convert(altQualBySample[sampleName]));
+     
+
 
             }
         }
+        */
 
         // TODO
         // mismatch rate of reads containing supporting observations
@@ -533,6 +535,7 @@ vcf::Variant& Results::vcf(
             Genotype* genotype = gc->second->genotype;
 
             Sample& sample = *gc->second->sample;
+            //refAlleleObservations += sample.observationCount(refbase);
             refAlleleObservations += sample.observationCount(refbase);
 
             ++samplesWithData;
@@ -542,7 +545,28 @@ vcf::Variant& Results::vcf(
     var.info["NS"].push_back(convert(samplesWithData));
     var.info["DP"].push_back(convert(coverage));
     var.info["RO"].push_back(convert(refAlleleObservations));
+    var.info["PRO"].push_back(convert(samples.partialObservationCount(refbase)));
+    var.info["QR"].push_back(convert(samples.qualSum(refbase)));
+    var.info["PQR"].push_back(convert(samples.partialQualSum(refbase)));
 
+    // tally partial observations to get a mean coverage per bp of reference
+    int haplotypeLength = refbase.size();
+    int basesInObservations = 0;
+    
+    for (map<string, vector<Allele*> >::iterator g = alleleGroups.begin(); g != alleleGroups.end(); ++g) {
+        for (vector<Allele*>::iterator a = g->second.begin(); a != g->second.end(); ++a) {
+            basesInObservations += (*a)->alternateSequence.size();
+        }
+    }
+
+    for (map<Allele*, set<Allele*> >::iterator p = partialObservationSupport.begin(); p != partialObservationSupport.end(); ++p) {
+        basesInObservations += p->first->alternateSequence.size();
+    }
+ 
+    double depthPerBase = (double) basesInObservations / (double) haplotypeLength;
+    var.info["DPB"].push_back(convert(depthPerBase));
+
+    // number of alternate alleles
     var.info["NUMALT"].push_back(convert(altAlleles.size()));
 
     if (parameters.showReferenceRepeats && !repeats.empty()) {
@@ -621,6 +645,13 @@ vcf::Variant& Results::vcf(
             sampleOutput["RO"].push_back(convert(sample.observationCount(refbase)));
             sampleOutput["QR"].push_back(convert(sample.qualSum(refbase)));
 
+            for (vector<Allele>::iterator aa = altAlleles.begin(); aa != altAlleles.end(); ++aa) {
+                Allele& altAllele = *aa;
+                string altbase = altAllele.base();
+                sampleOutput["AO"].push_back(convert(sample.observationCount(altbase)));
+                sampleOutput["QA"].push_back(convert(sample.qualSum(altbase)));
+            }
+
             if (outputAnyGenotypeLikelihoods && !parameters.excludeUnobservedGenotypes && !parameters.excludePartiallyObservedGenotypes) {
 
                 // get data likelihoods for present genotypes, none if we have excluded genotypes from data likelihood calculations
@@ -663,7 +694,8 @@ vcf::Variant& Results::vcf(
                         var.format.push_back("GL");
                     }
 
-                    map<int, string> genotypeLikelihoods;
+                    map<int, double> genotypeLikelihoods;
+                    map<int, string> genotypeLikelihoodsOutput;
 
                     for (Result::iterator g = sampleLikelihoods.begin(); g != sampleLikelihoods.end(); ++g) {
                         if (g->genotype->hasNullAllele()) {
@@ -677,7 +709,7 @@ vcf::Variant& Results::vcf(
                             for (vector<Genotype*>::iterator n = nullmatchgts.begin(); n != nullmatchgts.end(); ++n) {
                                 map<string, int>::iterator o = vcfGenotypeOrder[(*n)->ploidy].find((*n)->str());
                                 if (o != vcfGenotypeOrder[(*n)->ploidy].end()) {
-                                    genotypeLikelihoods[o->second] = convert(ln2log10(g->prob));
+                                    genotypeLikelihoods[o->second] = ln2log10(g->prob);
                                 }
                             }
                         } else {
@@ -685,14 +717,27 @@ vcf::Variant& Results::vcf(
                             // genotype should match
                             map<string, int>::iterator o = vcfGenotypeOrder[g->genotype->ploidy].find(g->genotype->str());
                             if (o != vcfGenotypeOrder[g->genotype->ploidy].end()) {
-                                genotypeLikelihoods[o->second] = convert(ln2log10(g->prob));
+                                genotypeLikelihoods[o->second] = ln2log10(g->prob);
                             }
                         }
                     }
 
+                    // normalize GLs to -5 min 0 max using division by max and bounding at -5
+                    long double minGL = 0;
+                    for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
+                        if (g->second < minGL) minGL = g->second;
+                    }
+                    long double maxGL = minGL;
+                    for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
+                        if (g->second > maxGL) maxGL = g->second;
+                    }
+                    for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
+                        genotypeLikelihoodsOutput[g->first] = convert( max((long double)-5, (g->second-maxGL)) );
+                    }
+
                     vector<string>& datalikelihoods = sampleOutput["GL"];
                     // output is sorted by map
-                    for (map<int, string>::iterator gl = genotypeLikelihoods.begin(); gl != genotypeLikelihoods.end(); ++gl) {
+                    for (map<int, string>::iterator gl = genotypeLikelihoodsOutput.begin(); gl != genotypeLikelihoodsOutput.end(); ++gl) {
                         datalikelihoods.push_back(gl->second);
                     }
 

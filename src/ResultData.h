@@ -9,7 +9,7 @@
 #include "Utility.h"
 #include "AlleleParser.h"
 #include "../vcflib/Variant.h"
-#include "Version.h"
+#include "version_git.h"
 #include "Result.h"
 
 using namespace std;
@@ -55,10 +55,11 @@ public:
         GenotypeCombo& genotypeCombo,
         bool bestOverallComboIsHet,
         map<string, vector<Allele*> >& alleleGroups,
+        map<string, vector<Allele*> >& partialObservationGroups,
+        map<Allele*, set<Allele*> >& partialSupport,
         map<int, vector<Genotype> >& genotypesByPloidy,
         vector<string>& sequencingTechnologies,
         AlleleParser* parser);
-
 };
 
 

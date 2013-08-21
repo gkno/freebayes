@@ -10,14 +10,31 @@ int Allele::referenceOffset(void) const {
     return *currentReferencePosition - position;
 }
 
-// called prior to using the allele in analysis
-void Allele::update(void) {
+void Allele::setQuality(void) {
     quality = currentQuality();
     lnquality = phred2ln(quality);
-    if (type == ALLELE_REFERENCE) {
-        currentBase = string(1, *currentReferenceBase);
-        basesLeft = bpLeft + referenceOffset();
-        basesRight = bpRight - referenceOffset();
+}
+
+int Allele::bpLeft(void) {
+    return position - alignmentStart;
+}
+
+int Allele::bpRight(void) {
+    return alignmentEnd - position + referenceLength;
+}
+
+// called prior to using the allele in analysis
+// called again when haplotype alleles are built, in which case the "currentBase" is set to the alternate sequence of the allele
+void Allele::update(int haplotypeLength) {
+    setQuality();
+    basesLeft = bpLeft();
+    basesRight = bpRight();
+    if (haplotypeLength == 1) {
+        if (type == ALLELE_REFERENCE) {
+            currentBase = string(1, *currentReferenceBase);
+        } else {
+            currentBase = base();
+        }
     } else {
         currentBase = base();
     }
@@ -119,32 +136,40 @@ void updateAllelesCachedData(vector<Allele*>& alleles) {
 }
 
 /*
-const int Allele::basesLeft(void) const {
-    if (type == ALLELE_REFERENCE) {
-        return bpLeft + referenceOffset();
-    } else {
-        return bpLeft;
-    }
-}
+  const int Allele::basesLeft(void) const {
+  if (type == ALLELE_REFERENCE) {
+  return bpLeft + referenceOffset();
+  } else {
+  return bpLeft;
+  }
+  }
 
-const int Allele::basesRight(void) const {
-    if (type == ALLELE_REFERENCE) {
-        return bpRight - referenceOffset();
-    } else {
-        return bpRight;
-    }
-}
+  const int Allele::basesRight(void) const {
+  if (type == ALLELE_REFERENCE) {
+  return bpRight - referenceOffset();
+  } else {
+  return bpRight;
+  }
+  }
 */
 
 // quality at a given reference position
 const short Allele::currentQuality(void) const {
+    //cerr << readID << " " << position << "-" << position + length << " " << alternateSequence.size() << " vs " << baseQualities.size() << endl;
     switch (this->type) {
         case ALLELE_REFERENCE:
-            assert(alternateSequence.size() == baseQualities.size());
-            assert(referenceOffset() >= 0);
-            TRY {
-            return baseQualities.at(referenceOffset());
-            } CATCH;
+            // should check a different way... this is wrong
+            // it will catch it all the time,
+            if (currentBase.size() > 1) {
+                return averageQuality(baseQualities);
+            } else {
+                int off = referenceOffset();
+                if (off < 0 || off > baseQualities.size()) {
+                    return 0;
+                } else {
+                    return baseQualities.at(off);
+                }
+            }
             break;
         case ALLELE_INSERTION:
         case ALLELE_DELETION:
@@ -229,66 +254,42 @@ bool Allele::isNull(void) const {
 const string Allele::base(void) const { // the base of this allele
 
     switch (this->type) {
-        case ALLELE_REFERENCE:
-            if (genotypeAllele)
-                return alternateSequence;
-            else
-                return currentBase;
-            break;
-        case ALLELE_GENOTYPE:
+    case ALLELE_REFERENCE:
+        if (genotypeAllele)
             return alternateSequence;
-            break;
-        case ALLELE_SNP:
-            return "S:" + convert(position) + ":" + cigar + ":" + alternateSequence;
-            break;
-        case ALLELE_MNP:
-            return "M:" + convert(position) + ":" + cigar + ":" + alternateSequence;
-            break;
-        case ALLELE_INSERTION:
-            return "I:" + convert(position) + ":" + cigar + ":" + alternateSequence;
-            break;
-        case ALLELE_DELETION:
-            return "D:" + convert(position) + ":" + cigar;
-            break;
-        case ALLELE_COMPLEX:
-            return "C:" + convert(position) + ":" + cigar + ":" + alternateSequence;
-            break;
-        case ALLELE_NULL:
-            return "N:" + convert(position) + ":" + alternateSequence;
-        default:
-            break;
-    }
-
-}
-
-const bool Allele::masked(void) const {
-
-    // guard against uninitialized indelMask
-    if (indelMask.size() == 0)
-        return false;
-
-    if (genotypeAllele)
-        return false;
-
-    switch (this->type) {
-        case ALLELE_GENOTYPE:
-            return false;
-            break;
-        case ALLELE_REFERENCE:
-            return indelMask.at(referenceOffset());
-            break;
-        case ALLELE_SNP:
-            return indelMask.at(0);
-            break;
-        case ALLELE_INSERTION: // XXX presently these are masked by default...
-        case ALLELE_DELETION:
-        case ALLELE_MNP:
-        case ALLELE_COMPLEX:
-        case ALLELE_NULL:
-            return true;
-            break;
-        default:
-            break;
+        else
+            return currentBase;
+        break;
+    case ALLELE_GENOTYPE:
+        return alternateSequence;
+        break;
+        /*
+    case ALLELE_GENOTYPE:
+        return alternateSequence; // todo fix
+        break;
+    case ALLELE_REFERENCE:
+        return "R:" + convert(position) + ":" + cigar + ":" + alternateSequence;
+        break;
+        */
+    case ALLELE_SNP:
+        return "S:" + convert(position) + ":" + cigar + ":" + alternateSequence;
+        break;
+    case ALLELE_MNP:
+        return "M:" + convert(position) + ":" + cigar + ":" + alternateSequence;
+        break;
+    case ALLELE_INSERTION:
+        return "I:" + convert(position) + ":" + cigar + ":" + alternateSequence;
+        break;
+    case ALLELE_DELETION:
+        return "D:" + convert(position) + ":" + cigar;
+        break;
+    case ALLELE_COMPLEX:
+        return "C:" + convert(position) + ":" + cigar + ":" + alternateSequence;
+        break;
+    case ALLELE_NULL:
+        return "N:" + convert(position) + ":" + alternateSequence;
+    default:
+        break;
     }
 
 }
@@ -417,7 +418,7 @@ ostream &operator<<(ostream &out, Allele &allele) {
             << ":" << (allele.strand == STRAND_FORWARD ? "+" : "-")
             << ":" << allele.alternateSequence
             //<< ":" << allele.referenceSequence
-	    << ":" << allele.repeatRightBoundary
+            << ":" << allele.repeatRightBoundary
             << ":" << allele.cigar
             << ":" << allele.quality;
     } else {
@@ -600,7 +601,7 @@ void groupAllelesBySample(list<Allele*>& alleles, map<string, vector<Allele*> >&
 // should have the same cigar and position.  this function picks the most
 // common allele observation per alternate sequence and homogenizes the rest to
 // the same if they are not reference alleles
-void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups) {
+void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refseq) {
     map<string, map<string, int> > equivs;
     map<string, Allele*> homogenizeTo;
     for (map<string, vector<Allele*> >::iterator g = alleleGroups.begin(); g != alleleGroups.end(); ++g) {
@@ -898,19 +899,6 @@ void filterAlleles(list<Allele*>& alleles, int allowedTypes) {
 
 }
 
-// removes alleles which are indelmasked at position
-void removeIndelMaskedAlleles(list<Allele*>& alleles, long int position) {
-
-    for (list<Allele*>::iterator allele = alleles.begin(); allele != alleles.end(); ++allele) {
-        //cerr << *allele << " " << (*allele)->indelMask.size() << " " << (*allele)->referenceOffset() << endl;
-        if ((*allele)->masked()) {
-            *allele = NULL;
-        }
-    }
-    alleles.erase(remove(alleles.begin(), alleles.end(), (Allele*)NULL), alleles.end());
-
-}
-
 int countAlleles(map<string, vector<Allele*> >& sampleGroups) {
 
     int count = 0;
@@ -1006,6 +994,7 @@ void Allele::subtract(
             switch (op) {
                 case 'M':
                 case 'X':
+                case 'N':
                     refbpstart -= c.first;
                     subtractFromAltStart += c.first;
                     break;
@@ -1029,6 +1018,7 @@ void Allele::subtract(
                 switch (op) {
                     case 'M':
                     case 'X':
+                    case 'N':
                     case 'I':
                         subtractFromAltStart += refbpstart;
                         break;
@@ -1054,6 +1044,7 @@ void Allele::subtract(
             switch (op) {
                 case 'M':
                 case 'X':
+                case 'N':
                     subtractFromAltEnd += c.first;
                     refbpend -= c.first;
                     break;
@@ -1078,6 +1069,7 @@ void Allele::subtract(
                     case 'M':
                     case 'X':
                     case 'I':
+                    case 'N':
                         subtractFromAltEnd += refbpend;
                         break;
                     case 'D':
@@ -1164,6 +1156,7 @@ void Allele::add(
             case 'M':
             case 'X':
             case 'D':
+            case 'N':
                 position -= c->first;
                 break;
             case 'I':
@@ -1242,6 +1235,9 @@ void Allele::updateTypeAndLengthFromCigar(void) {
                     type = ALLELE_SNP;
                 }
                 break;
+            case 'N':
+                type = ALLELE_NULL;
+                break;
             default:
                 break;
         }
@@ -1299,14 +1295,15 @@ int referenceLengthFromCigar(string& cigar) {
     vector<pair<int, string> > cigarV = splitCigar(cigar);
     for (vector<pair<int, string> >::iterator c = cigarV.begin(); c != cigarV.end(); ++c) {
         switch (c->second[0]) {
-            case 'M':
-            case 'X':
-            case 'D':
-                r += c->first;
-                break;
-            case 'I':
-            default:
-                break;
+        case 'M':
+        case 'X':
+        case 'D':
+        case 'N':
+            r += c->first;
+            break;
+        case 'I':
+        default:
+            break;
         }
     }
     return r;
@@ -1317,14 +1314,15 @@ int Allele::referenceLengthFromCigar(void) {
     vector<pair<int, string> > cigarV = splitCigar(cigar);
     for (vector<pair<int, string> >::iterator c = cigarV.begin(); c != cigarV.end(); ++c) {
         switch (c->second[0]) {
-            case 'M':
-            case 'X':
-            case 'D':
-                r += c->first;
-                break;
-            case 'I':
-            default:
-                break;
+        case 'M':
+        case 'X':
+        case 'D':
+        case 'N':
+            r += c->first;
+            break;
+        case 'I':
+        default:
+            break;
         }
     }
     return r;
@@ -1338,7 +1336,6 @@ void Allele::mergeAllele(const Allele& newAllele, AlleleType newType) {
     alternateSequence += newAllele.alternateSequence;
     length += newAllele.length; // hmmm
     basesRight = newAllele.basesRight;
-    bpRight = newAllele.bpRight;
     baseQualities.insert(baseQualities.end(), newAllele.baseQualities.begin(), newAllele.baseQualities.end());
     currentBase = base();
     // XXX note that we don't add Q values for intermingled gaps in combined alleles
@@ -1347,7 +1344,6 @@ void Allele::mergeAllele(const Allele& newAllele, AlleleType newType) {
         lnquality = max(newAllele.lnquality, lnquality);
     } else {
         basesRight += newAllele.referenceLength;
-        bpRight += newAllele.referenceLength;
     }
     if (newAllele.type != ALLELE_REFERENCE) {
 	repeatRightBoundary = newAllele.repeatRightBoundary;
@@ -1389,9 +1385,9 @@ bool isEmptyAllele(const Allele& allele) {
 bool isDividedIndel(const Allele& allele) {
     vector<pair<int, string> > cigarV = splitCigar(allele.cigar);
     if (cigarV.front().second == "D" || cigarV.front().second == "I") {
-	return true;
+        return true;
     } else {
-	return false;
+        return false;
     }
 }
 
