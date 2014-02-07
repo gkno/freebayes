@@ -8,7 +8,7 @@
 #include "Allele.h"
 #include "Utility.h"
 #include "AlleleParser.h"
-#include "../vcflib/Variant.h"
+#include "Variant.h"
 #include "version_git.h"
 #include "Result.h"
 
@@ -53,7 +53,6 @@ public:
         vector<string>& sampleNames,
         int coverage,
         GenotypeCombo& genotypeCombo,
-        bool bestOverallComboIsHet,
         map<string, vector<Allele*> >& alleleGroups,
         map<string, vector<Allele*> >& partialObservationGroups,
         map<Allele*, set<Allele*> >& partialSupport,

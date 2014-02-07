@@ -10,17 +10,51 @@
 
 using namespace std;
 
+class StrandBaseCounts {
+
+public:
+    int forwardRef;
+    int forwardAlt;
+    int reverseRef;
+    int reverseAlt;
+
+StrandBaseCounts(void)
+    : forwardRef(0), forwardAlt(0), reverseRef(0), reverseAlt(0)
+    { }
+
+StrandBaseCounts(int fr,
+                 int fa,
+                 int rr,
+                 int ra)
+    : forwardRef(fr)
+        , forwardAlt(fa)
+        , reverseRef(rr)
+        , reverseAlt(ra) { }
+
+};
+
 // sample tracking and allele sorting
 class Sample : public map<string, vector<Allele*> > {
 
     friend ostream& operator<<(ostream& out, Sample& sample);
 
 public:
+
+    // includes both fully and partially-supported observations after adding partial obs
+    set<string> supportedAlleles;
+    void setSupportedAlleles(void);
+
     // partial support for alleles, such as for observations that partially overlap the calling window
-    map<string, vector<Allele*> > partials;
+    map<string, vector<Allele*> > partialSupport;
 
     // for fast scaling of qualities for partial supports
     map<Allele*, set<Allele*> > reversePartials;
+
+    // clear the above
+    void clearPartialObservations(void);
+
+    // set of partial observations (keys of the above map) cached for faster GL calculation
+    //vector<Allele*> partialObservations;
 
     // if the observation (partial or otherwise) supports the allele
     bool observationSupports(Allele* obs, Allele* allele);
@@ -51,8 +85,7 @@ public:
     // occurs in the case of reference alleles)
     void sortReferenceAlleles(void);
 
-    pair<pair<int, int>, pair<int, int> >
-        baseCount(string refbase, string altbase);
+    StrandBaseCounts strandBaseCount(string refbase, string altbase);
 
     int baseCount(string base, AlleleStrand strand);
 
@@ -66,9 +99,10 @@ public:
     void assignPartialSupport(vector<Allele>& alleles,
                               vector<Allele*>& partialObservations,
                               map<string, vector<Allele*> >& partialObservationGroups,
-                              map<Allele*, set<Allele*> >& partialObservationSupport);
-    //map<string, vector<Allele*> >& partials,
-    //map<Allele*, vector<string*> >& reversePartials);
+                              map<Allele*, set<Allele*> >& partialObservationSupport,
+                              unsigned long haplotypeStart,
+                              int haplotypeLength);
+
     int observationCount(void);
     double observationCountInclPartials(void);
 
@@ -84,6 +118,10 @@ public:
     int qualSum(const string& base);
     double partialQualSum(Allele& allele);
     double partialQualSum(const string& base);
+
+    void clearFullObservations(void);
+    void clearPartialObservations(void);
+    void setSupportedAlleles(void);
 };
 
 

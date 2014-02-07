@@ -263,6 +263,21 @@ public:
     unsigned int getLengthOnReference(void);
     int referenceLengthFromCigar(void);
 
+    string readSeq(void);
+    string read5p(void);
+    string read3p(void);
+    string read5pNonNull(void);
+    string read3pNonNull(void);
+
+    // the number of bases from the 5p edge of the allele until the end or the next null allele
+    int read5pNonNullBases(void);
+    // the number of bases from the 3p edge of the allele until the end or the next null allele
+    int read3pNonNullBases(void);
+
+    // wish list...
+    //string readRefRelativeSubstr(long int start, long int end);
+    //string readRefStartLenSubstr(long int start, int bp);
+
     vector<Allele*> extend(int pos, int haplotypeLength);
     void squash(void);
     void subtract(int subtractFromRefStart,
@@ -344,7 +359,7 @@ bool allelesSameSample(Allele &a, Allele &b);
 bool allelesEqual(Allele &a, Allele &b);
 
 void groupAlleles(map<string, vector<Allele*> >& sampleGroups, map<string, vector<Allele*> >& alleleGroups);
-void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refseq);
+void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refseq, Allele& refallele);
 void resetProcessedFlag(map<string, vector<Allele*> >& alleleGroups);
 
 vector<Allele> alleleUnion(vector<Allele>& a1, vector<Allele>& a2);
@@ -369,6 +384,7 @@ Allele genotypeAllele(AlleleType type, string alt = "", unsigned int length = 0,
 bool isEmptyAllele(const Allele& allele);
 bool isDividedIndel(const Allele& allele);
 bool isEmptyAlleleOrIsDividedIndel(const Allele& allele);
+bool isUnflankedIndel(const Allele& allele);
 
 int referenceLengthFromCigar(string& cigar);
 

@@ -20,15 +20,12 @@ int Allele::bpLeft(void) {
 }
 
 int Allele::bpRight(void) {
-    return alignmentEnd - position + referenceLength;
+    return alignmentEnd - (position + referenceLength);
 }
 
 // called prior to using the allele in analysis
 // called again when haplotype alleles are built, in which case the "currentBase" is set to the alternate sequence of the allele
 void Allele::update(int haplotypeLength) {
-    setQuality();
-    basesLeft = bpLeft();
-    basesRight = bpRight();
     if (haplotypeLength == 1) {
         if (type == ALLELE_REFERENCE) {
             currentBase = string(1, *currentReferenceBase);
@@ -38,6 +35,10 @@ void Allele::update(int haplotypeLength) {
     } else {
         currentBase = base();
     }
+    // should be done after setting currentBase to haplotypeLength
+    if (isReference()) setQuality();
+    basesLeft = bpLeft();
+    basesRight = bpRight();
 }
 
 // quality of subsequence of allele
@@ -407,6 +408,7 @@ ostream &operator<<(ostream &out, Allele* &allele) {
 ostream &operator<<(ostream &out, Allele &allele) {
 
     if (!allele.genotypeAllele) {
+        int prec = out.precision();
         // << &allele << ":" 
         out.precision(1);
         out << allele.sampleID
@@ -421,11 +423,13 @@ ostream &operator<<(ostream &out, Allele &allele) {
             << ":" << allele.repeatRightBoundary
             << ":" << allele.cigar
             << ":" << allele.quality;
+        out.precision(prec);
     } else {
         out << allele.typeStr() 
             << ":" << allele.length 
             << ":" << (string) allele.alternateSequence;
     }
+    out.precision(5);
     return out;
 }
 
@@ -601,9 +605,11 @@ void groupAllelesBySample(list<Allele*>& alleles, map<string, vector<Allele*> >&
 // should have the same cigar and position.  this function picks the most
 // common allele observation per alternate sequence and homogenizes the rest to
 // the same if they are not reference alleles
-void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refseq) {
+void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refseq, Allele& refallele) {
     map<string, map<string, int> > equivs;
     map<string, Allele*> homogenizeTo;
+    // find equivalencies between alleles
+    // base equivalency is self
     for (map<string, vector<Allele*> >::iterator g = alleleGroups.begin(); g != alleleGroups.end(); ++g) {
         Allele& allele = *g->second.front();
         if (allele.isReference()) {
@@ -611,6 +617,7 @@ void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refs
         }
         equivs[allele.alternateSequence][g->first]++;
     }
+    // 
     for (map<string, map<string, int> >::iterator e = equivs.begin(); e != equivs.end(); ++e) {
         string altseq = e->first;
         map<string, int>& group = e->second;
@@ -619,8 +626,14 @@ void homogenizeAlleles(map<string, vector<Allele*> >& alleleGroups, string& refs
             // pick the best by count
             ordered[f->second] = f->first;
         }
-        string& altbase = ordered.rend()->second;
-        homogenizeTo[altseq] = alleleGroups[altbase].front();
+
+        // choose the most common group
+        string& altbase = ordered.rbegin()->second;
+        if (altseq == refseq) {
+            homogenizeTo[altseq] = &refallele;
+        } else {
+            homogenizeTo[altseq] = alleleGroups[altbase].front();
+        }
     }
     for (map<string, vector<Allele*> >::iterator g = alleleGroups.begin(); g != alleleGroups.end(); ++g) {
         vector<Allele*>& alleles = g->second;
@@ -957,6 +970,105 @@ baseCount(vector<Allele*>& alleles, string refbase, string altbase) {
 
     return make_pair(make_pair(forwardRef, forwardAlt), make_pair(reverseRef, reverseAlt));
 
+}
+
+string Allele::readSeq(void) {
+    string r;
+    for (vector<Allele>::iterator a = alignmentAlleles->begin(); a != alignmentAlleles->end(); ++a) {
+        r.append(a->alternateSequence);
+    }
+    return r;
+}
+
+string Allele::read5p(void) {
+    string r;
+    vector<Allele>::const_reverse_iterator a = alignmentAlleles->rbegin();
+    while (&*a != this) {
+        ++a;
+    }
+    if ((a+1) != alignmentAlleles->rend()) ++a;
+    while (a != alignmentAlleles->rend()) {
+        r = a->alternateSequence + r;
+        ++a;
+    }
+    r.append(alternateSequence);
+    return r;
+}
+
+string Allele::read3p(void) {
+    string r = alternateSequence;
+    vector<Allele>::const_iterator a = alignmentAlleles->begin();
+    while (&*a != this) {
+        ++a;
+    }
+    if ((a+1) != alignmentAlleles->end()) ++a;
+    while (a != alignmentAlleles->end()) {
+        r.append(a->alternateSequence);
+        ++a;
+    }
+    return r;
+}
+
+string Allele::read5pNonNull(void) {
+    string r = alternateSequence;
+    vector<Allele>::const_reverse_iterator a = alignmentAlleles->rbegin();
+    while (&*a != this) {
+        ++a;
+    }
+    while (a != alignmentAlleles->rend() && !a->isNull()) {
+        if (&*a != this) {
+            r = a->alternateSequence + r;
+        }
+        ++a;
+    }
+    return r;
+}
+
+string Allele::read3pNonNull(void) {
+    string r = alternateSequence;
+    vector<Allele>::const_iterator a = alignmentAlleles->begin();
+    while (&*a != this) {
+        ++a;
+    }
+    while (a != alignmentAlleles->end() && !a->isNull()) {
+        if (&*a != this) {
+            r.append(a->alternateSequence);
+        }
+        ++a;
+    }
+    return r;
+}
+
+int Allele::read5pNonNullBases(void) {
+    int bp = 0;
+    vector<Allele>::const_reverse_iterator a = alignmentAlleles->rbegin();
+    while (&*a != this) {
+        ++a;
+    }
+    while (a != alignmentAlleles->rend() && !a->isNull()) {
+        if (&*a != this) {
+            //cerr << "5p bp = " << bp << " adding " << stringForAllele(*a) << " to " << stringForAllele(*this) << endl;
+            bp += a->alternateSequence.size();
+        }
+        ++a;
+    }
+    return bp;
+}
+
+int Allele::read3pNonNullBases(void) {
+    int bp = 0;
+    vector<Allele>::const_iterator a = alignmentAlleles->begin();
+    while (&*a != this) {
+        ++a;
+    }
+    while (a != alignmentAlleles->end() && !a->isNull()) {
+        if (&*a != this) {
+            //cerr << "3p bp = " << bp << " adding " << stringForAllele(*a) << " to " << stringForAllele(*this) << endl;
+            bp += a->alternateSequence.size();
+        }
+        ++a;
+    }
+    return bp;
 }
 
 // adjusts the allele to have a new start
@@ -1342,11 +1454,15 @@ void Allele::mergeAllele(const Allele& newAllele, AlleleType newType) {
     if (newAllele.type != ALLELE_REFERENCE) {
         quality = min(newAllele.quality, quality);
         lnquality = max(newAllele.lnquality, lnquality);
+        //quality = minQuality(baseQualities);
+        //lnquality = log(quality);
     } else {
+        quality = averageQuality(baseQualities);
+        lnquality = log(quality);
         basesRight += newAllele.referenceLength;
     }
     if (newAllele.type != ALLELE_REFERENCE) {
-	repeatRightBoundary = newAllele.repeatRightBoundary;
+        repeatRightBoundary = newAllele.repeatRightBoundary;
     }
     cigar = mergeCigar(cigar, newAllele.cigar);
     referenceLength = referenceLengthFromCigar();
@@ -1388,6 +1504,23 @@ bool isDividedIndel(const Allele& allele) {
         return true;
     } else {
         return false;
+    }
+}
+
+// returns true if this indel is not properly flanked by reference-matching sequence
+bool isUnflankedIndel(const Allele& allele) {
+    if (allele.isReference() || allele.isSNP() || allele.isMNP()) {
+        return false;
+    } else {
+        vector<pair<int, string> > cigarV = splitCigar(allele.cigar);
+        if (cigarV.back().second == "D"
+            || cigarV.back().second == "I"
+            || cigarV.front().second == "D"
+            || cigarV.front().second == "I") {
+            return true;
+        } else {
+            return false;
+        }
     }
 }
 

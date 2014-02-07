@@ -28,7 +28,7 @@
 #include "CNV.h"
 #include "Result.h"
 #include "LeftAlign.h"
-#include "../vcflib/Variant.h"
+#include "Variant.h"
 #include "version_git.h"
 
 // the size of the window of the reference which is always cached in memory
@@ -146,6 +146,7 @@ public:
     FastaReference reference;
     vector<string> referenceSequenceNames;
     map<int, string> referenceIDToName;
+    string referenceSampleName;
     
     // target regions
     vector<BedTarget> targets;
@@ -246,7 +247,10 @@ public:
     void removeNonOverlappingAlleles(vector<Allele*>& alleles,
                                      int haplotypeLength = 1,
                                      bool getAllAllelesInHaplotype = false);
+    void removePreviousAlleles(vector<Allele*>& alleles);
     void removeFilteredAlleles(vector<Allele*>& alleles);
+    void removeDuplicateAlleles(Samples& samples, map<string, vector<Allele*> >& alleleGroups,
+                                int allowedAlleleTypes, int haplotypeLength, Allele& refallele);
     void updateRegisteredAlleles(void);
     void addToRegisteredAlleles(vector<Allele*>& alleles);
     void updatePriorAlleles(void);
@@ -262,6 +266,7 @@ public:
     void setPosition(long unsigned int);
     int currentSequencePosition(const BamAlignment& alignment);
     int currentSequencePosition();
+    void unsetAllProcessedFlags(void);
     bool getNextAlleles(Samples& allelesBySample, int allowedAlleleTypes);
 
     // builds up haplotype (longer, e.g. ref+snp+ref) alleles to match the longest allele in genotypeAlleles
@@ -273,7 +278,11 @@ public:
                                map<string, vector<Allele*> >& partialObservationGroups,
                                map<Allele*, set<Allele*> >& partialObservationSupport,
                                int allowedAlleleTypes);
-    void getAlleles(Samples& allelesBySample, int allowedAlleleTypes, int haplotypeLength = 1, bool getAllAllelesInHaplotype = false);
+    void getAlleles(Samples& allelesBySample,
+                    int allowedAlleleTypes,
+                    int haplotypeLength = 1,
+                    bool getAllAllelesInHaplotype = false,
+                    bool ignoreProcessedAlleles = true);
     Allele* referenceAllele(int mapQ, int baseQ);
     Allele* alternateAllele(int mapQ, int baseQ);
     int homopolymerRunLeft(string altbase);
