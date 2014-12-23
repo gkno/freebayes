@@ -1,9 +1,12 @@
 [submodule "vcflib"]
 	path = vcflib
-	url = git://github.com/ekg/vcflib.git
+	url = https://github.com/ekg/vcflib.git
 [submodule "bamtools"]
 	path = bamtools
-	url = git://github.com/pezmaster31/bamtools.git
+	url = https://github.com/ekg/bamtools.git
 [submodule "intervaltree"]
 	path = intervaltree
-	url = git://github.com/ekg/intervaltree.git
+	url = https://github.com/ekg/intervaltree.git
+[submodule "test/test-simple-bash"]
+	path = test/test-simple-bash
+	url = https://github.com/ingydotnet/test-simple-bash.git

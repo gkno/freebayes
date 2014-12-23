@@ -64,6 +64,15 @@ int Genotype::alleleCount(Allele& allele) {
     }
 }
 
+// returns true when the genotype is composed of a subset of the alleles
+bool Genotype::matchesAlleles(vector<Allele>& alleles) {
+    int p = 0;
+    for (vector<Allele>::iterator a = alleles.begin(); a != alleles.end(); ++a) {
+        p += alleleCount(*a);
+    }
+    return ploidy == p;
+}
+
 double Genotype::alleleSamplingProb(const string& base) {
     map<string, int>::iterator ge = alleleCounts.find(base);
     if (ge == alleleCounts.end()) {
@@ -1347,6 +1356,7 @@ void addAllHomozygousCombos(
                                      binomialObsPriors,
                                      alleleBalancePriors,
                                      diffusionPriorScalar);
+
         combos.push_back(gc);
     }
 
@@ -1354,6 +1364,25 @@ void addAllHomozygousCombos(
     GenotypeComboResultSorter gcrSorter;
     combos.sort(gcrSorter);
     combos.unique();
+
+    /*
+    for (list<GenotypeCombo>::iterator g = combos.begin(); g != combos.end(); ++g) {
+        GenotypeCombo& gc = *g;
+        cerr << gc << endl
+             << "," << gc.probObsGivenGenotypes
+             << "," << gc.posteriorProb
+             << "," << gc.priorProbG_Af
+             << "," << gc.priorProbAf
+             << "," << gc.priorProbObservations
+             << endl;
+        map<int, int> acs = gc.countFrequencies();
+        for (map<int, int>::iterator a = acs.begin(); a != acs.end(); ++a) {
+            cerr << a->first << " " << a->second << endl;
+        }
+        cerr << "***************************" << endl;
+    }
+    */
+
 
 }
 
@@ -1501,13 +1530,16 @@ GenotypeCombo::calculatePosteriorProbability(
     if (binomialObsPriors) {
         // for each alternate and the reference allele
         // calculate the binomial probability that we see the given strand balance and read placement prob
-        // cerr << *combo << endl;
+        //cerr << *this << endl;
         for (map<string, AlleleCounter>::iterator ac = alleleCounters.begin(); ac != alleleCounters.end(); ++ac) {
             //const string& allele = ac->first;
             const AlleleCounter& alleleCounter = ac->second;
             int obs = alleleCounter.observations;
+
             /*
-            cerr << allele <<  " counts: " << alleleCounter.frequency
+            cerr << endl
+                 << "--------------------------------------------" << endl;
+            cerr <<  " counts: " << alleleCounter.frequency
                 << " observations " << alleleCounter.observations
                 << " " << alleleCounter.forwardStrand
                 << "," << alleleCounter.reverseStrand
@@ -1516,12 +1548,17 @@ GenotypeCombo::calculatePosteriorProbability(
                 << " " << alleleCounter.placedStart
                 << "," << alleleCounter.placedEnd
                 << endl;
-                */
+
+            cerr << "priorProbObservations = " << priorProbObservations << endl;
+            cerr << "binprobln strand = " << binomialProbln(alleleCounter.forwardStrand, obs, 0.5) << endl;
+            cerr << "binprobln position = " << binomialProbln(alleleCounter.placedLeft, obs, 0.5) << endl;
+            cerr << "binprobln start = " << binomialProbln(alleleCounter.placedStart, obs, 0.5) << endl;
+            */
 
             priorProbObservations
                 += binomialProbln(alleleCounter.forwardStrand, obs, 0.5)
-		    +  binomialProbln(alleleCounter.placedLeft, obs, 0.5)
-		    +  binomialProbln(alleleCounter.placedStart, obs, 0.5);
+                +  binomialProbln(alleleCounter.placedLeft, obs, 0.5)
+                +  binomialProbln(alleleCounter.placedStart, obs, 0.5);
         }
     }
 
@@ -1545,6 +1582,7 @@ GenotypeCombo::calculatePosteriorProbability(
     }
 
     // posterior probability
+
     /*
     cerr << "priorProbG_Af " << priorProbG_Af << endl
 	 << "priorProbAf " << priorProbAf << endl
@@ -1552,8 +1590,16 @@ GenotypeCombo::calculatePosteriorProbability(
 	 << "priorProbGenotypesGivenHWE " << priorProbGenotypesGivenHWE << endl
 	 << "probObsGivenGenotypes " << probObsGivenGenotypes << endl;
     */
+
     priorProb = priorProbG_Af + priorProbAf + priorProbObservations + priorProbGenotypesGivenHWE;
     posteriorProb = priorProb + probObsGivenGenotypes;
+
+    /*
+    cerr << "priorProb " << priorProb << endl;
+    cerr << "posteriorProb " << posteriorProb << endl;
+
+    cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" << endl << endl;
+    */
 
 }
 

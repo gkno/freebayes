@@ -9,42 +9,15 @@ void Parameters::simpleUsage(char ** argv) {
         << endl
         << "Bayesian haplotype-based polymorphism discovery." << endl
         << endl
+        << "parameters:" << endl
+        << endl
+        << "   -h --help       For a complete description of options." << endl
+        << endl
         << "citation: Erik Garrison, Gabor Marth" << endl
         << "          \"Haplotype-based variant detection from short-read sequencing\"" << endl
         << "          arXiv:1207.3907 (http://arxiv.org/abs/1207.3907)" << endl
         << endl
-        << "overview:" << endl
-        << endl
-        << "    To call variants from aligned short-read sequencing data, supply BAM files and" << endl
-        << "    a reference.  FreeBayes will provide VCF output on standard out describing SNPs," << endl
-        << "    indels, and complex variants in samples in the input alignments." << endl
-        << endl
-        << "    By default, FreeBayes will consider variants supported by at least 2" << endl
-        << "    observations in a single sample (-C) and also by at least 20% of the reads from" << endl
-        << "    a single sample (-F).  These settings are suitable to low to high depth" << endl
-        << "    sequencing in haploid and diploid samples, but users working with polyploid or" << endl
-        << "    pooled samples may wish to adjust them depending on the characteristics of" << endl
-        << "    their sequencing data." << endl
-        << endl
-        << "    FreeBayes is capable of calling variant haplotypes shorter than a read length" << endl
-        << "    where multiple polymorphisms segregate on the same read.  The maximum distance" << endl
-        << "    between polymorphisms phased in this way is determined by the --max-complex-gap," << endl
-        << "    which defaults to 3bp." << endl
-        << endl
-        << "    Ploidy may be set to any level (-p), but by default all samples are assumed to" << endl
-        << "    be diploid.  FreeBayes can model per-sample and per-region variation in" << endl
-        << "    copy-number (-A) using a copy-number variation map." << endl
-        << endl
-        << "    FreeBayes can act as a frequency-based pooled caller and describe variants" << endl
-        << "    and haplotypes in terms of observation frequency rather than called genotypes." << endl
-        << "    To do so, use --pooled-continuous and set input filters to a suitable level." << endl
-        << "    Allele observation counts will be described by AO and RO fields in the VCF output." << endl
-        << endl
-        << "parameters:" << endl
-        << endl
-        << "   -h --help       Complete description of options." << endl
-        << endl
-        << "author:   Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010-2012" << endl
+        << "author:   Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010-2014" << endl
         << "version:  " << VERSION_GIT << endl;
 
 }
@@ -82,9 +55,45 @@ void Parameters::usage(char** argv) {
         << "    be diploid.  FreeBayes can model per-sample and per-region variation in" << endl
         << "    copy-number (-A) using a copy-number variation map." << endl
         << endl
+        << "    FreeBayes can act as a frequency-based pooled caller and describe variants" << endl
+        << "    and haplotypes in terms of observation frequency rather than called genotypes." << endl
+        << "    To do so, use --pooled-continuous and set input filters to a suitable level." << endl
+        << "    Allele observation counts will be described by AO and RO fields in the VCF output." << endl
+        << endl
+        << endl
+        << "examples:" << endl
+        << endl
+        << "    # call variants assuming a diploid sample" << endl
+        << "    freebayes -f ref.fa aln.bam >var.vcf" << endl
+        << endl
+        << "    # require at least 5 supporting observations to consider a variant" << endl
+        << "    freebayes -f ref.fa -C 5 aln.bam >var.vcf" << endl
+        << endl
+        << "    # use a different ploidy" << endl
+        << "    freebayes -f ref.fa -p 4 aln.bam >var.vcf" << endl
+        << endl
+        << "    # assume a pooled sample with a known number of genome copies" << endl
+        << "    freebayes -f ref.fa -p 20 --pooled-discrete aln.bam >var.vcf" << endl
+        << endl
+        << "    # generate frequency-based calls for all variants passing input thresholds" << endl
+        << "    freebayes -f ref.fa -F 0.01 -C 1 --pooled-continuous aln.bam >var.vcf" << endl
+        << endl
+        << "    # use an input VCF (bgzipped + tabix indexed) to force calls at particular alleles" << endl
+        << "    freebayes -f ref.fa -@ in.vcf.gz aln.bam >var.vcf" << endl
+        << endl
+        << "    # generate long haplotype calls over known variants" << endl
+        << "    freebayes -f ref.fa --haplotype-basis-alleles in.vcf.gz \\ " << endl
+        << "                        --haplotype-length 50 aln.bam" << endl
+        << endl
+        << "    # naive variant calling: simply annotate observation counts of SNPs and indels" << endl
+        << "    freebayes -f ref.fa --haplotype-length 0 --min-alternate-count 1 \\ " << endl
+        << "        --min-alternate-fraction 0 --pooled-continuous --report-monomorphic >var.vcf" << endl
+        << endl
+        << endl
         << "parameters:" << endl
         << endl
         << "   -h --help       Prints this help dialog." << endl
+        << "   --version       Prints the release number and the git commit id." << endl
         << endl
         << "input and output:" << endl
         << endl
@@ -102,7 +111,8 @@ void Parameters::usage(char** argv) {
         << "                   Limit analysis to targets listed in the BED-format FILE." << endl
         << "   -r --region <chrom>:<start_position>-<end_position>" << endl
         << "                   Limit analysis to the specified region, 0-base coordinates," << endl
-        << "                   end_position included.  Either '-' or '..' maybe used as a separator." << endl
+        << "                   end_position not included (same as BED format)." << endl
+        << "                   Either '-' or '..' maybe used as a separator." << endl
         << "   -s --samples FILE" << endl
         << "                   Limit analysis to samples listed (one per line) in the FILE." << endl
         << "                   By default FreeBayes will analyze all samples in its input" << endl
@@ -123,9 +133,8 @@ void Parameters::usage(char** argv) {
         << "                   pass --pvar to FILE." << endl
         << "   -@ --variant-input VCF" << endl
         << "                   Use variants reported in VCF file as input to the algorithm." << endl
-        << "                   Variants in this file will be treated as putative variants" << endl
-        << "                   even if there is not enough support in the data to pass" << endl
-        << "                   input filters." << endl
+        << "                   Variants in this file will included in the output even if" << endl
+        << "                   there is not enough support in the data to pass input filters." << endl
         << "   -l --only-use-input-alleles" << endl
         << "                   Only provide variant calls and genotype likelihoods for sites" << endl
         << "                   and alleles which are provided in the VCF input, and provide" << endl
@@ -188,8 +197,8 @@ void Parameters::usage(char** argv) {
         << "   -E --max-complex-gap N" << endl
         << "      --haplotype-length N" << endl
         << "                   Allow haplotype calls with contiguous embedded matches of up" << endl
-        << "                   to this length." << endl
-        << "   --min-repeat-length N" << endl
+        << "                   to this length.  (default: 3)" << endl
+        << "   --min-repeat-size N" << endl
         << "                   When assembling observations across repeats, require the total repeat" << endl
         << "                   length at least this many bp.  (default: 5)" << endl
         << "   --min-repeat-entropy N" << endl
@@ -212,7 +221,7 @@ void Parameters::usage(char** argv) {
         << "                   default: exclude duplicates marked as such in alignments" << endl
         << "   -m --min-mapping-quality Q" << endl
         << "                   Exclude alignments from analysis if they have a mapping" << endl
-        << "                   quality less than Q.  default: 0" << endl
+        << "                   quality less than Q.  default: 1" << endl
         << "   -q --min-base-quality Q" << endl
         << "                   Exclude alleles from analysis if their supporting base" << endl
         << "                   quality is less than Q.  default: 0" << endl
@@ -287,10 +296,13 @@ void Parameters::usage(char** argv) {
         << "                   Read length-dependent allele observation biases from FILE." << endl
         << "                   The format is [length] [alignment efficiency relative to reference]" << endl
         << "                   where the efficiency is 1 if there is no relative observation bias." << endl
-        << "   --standard-gls" << endl
-        << "                   Use legacy model to generate genotype likelihoods." << endl
         << "   --base-quality-cap Q" << endl
         << "                   Limit estimated observation quality by capping base quality at Q." << endl
+        << "   --experimental-gls" << endl
+        << "                   Generate genotype likelihoods using 'effective base depth' metric" << endl
+        << "                   qual = 1-BaseQual * 1-MapQual.  Incorporate partial observations." << endl
+        << "                   This is the default when contamination estimates are provided." << endl
+        << "                   Optimized for diploid samples." << endl
         << "   --prob-contamination F" << endl
         << "                   An estimate of contamination to use for all samples.  default: 10e-9" << endl
         << "   --contamination-estimates FILE" << endl
@@ -338,7 +350,7 @@ void Parameters::usage(char** argv) {
         << "   -dd             Print more verbose debugging output (requires \"make DEBUG\")" << endl
         << endl
         << endl
-        << "author:   Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010-2012" << endl
+        << "author:   Erik Garrison <erik.garrison@bc.edu>, Marth Lab, Boston College, 2010-2014" << endl
         << "version:  " << VERSION_GIT << endl;
 
 }
@@ -410,15 +422,16 @@ Parameters::Parameters(int argc, char** argv) {
     genotypingMaxBandDepth = 7;
     minPairedAltCount = 0;
     minAltMeanMapQ = 0;
+    limitGL = 0;
     reportAllHaplotypeAlleles = false;
     reportMonomorphic = false;
     boundIndels = true; // ignore indels at ends of reads
     onlyUseInputAlleles = false;
-    standardGLs = false;
+    standardGLs = true;
     MQR = 100;                     // -M --reference-mapping-quality
     BQR = 60;                     // -B --reference-base-quality
     ploidy = 2;                  // -p --ploidy
-    MQL0 = 0;                    // -m --min-mapping-quality
+    MQL0 = 1;                    // -m --min-mapping-quality
     BQL0 = 0;                    // -q --min-base-quality
     minSupportingAlleleQualitySum = 0;
     minSupportingMappingQualitySum = 0;
@@ -455,6 +468,7 @@ Parameters::Parameters(int argc, char** argv) {
     static struct option long_options[] =
         {
             {"help", no_argument, 0, 'h'},
+            {"version", no_argument, 0, '#'},
             {"bam", required_argument, 0, 'b'},
             {"bam-list", required_argument, 0, 'L'},
             {"stdin", no_argument, 0, 'c'},
@@ -525,7 +539,7 @@ Parameters::Parameters(int argc, char** argv) {
             {"haplotype-basis-alleles", required_argument, 0, '9'},
             {"report-genotype-likelihood-max", no_argument, 0, '5'},
             {"report-all-haplotype-alleles", no_argument, 0, '6'},
-            {"standard-gls", no_argument, 0, ')'},
+            {"experimental-gls", no_argument, 0, ')'},
             {"base-quality-cap", required_argument, 0, '('},
             {"prob-contamination", required_argument, 0, '_'},
             {"contamination-estimates", required_argument, 0, ','},
@@ -538,7 +552,7 @@ Parameters::Parameters(int argc, char** argv) {
     while (true) {
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hcO4ZKjH[0diN5a)Ik=wl6uVXJY:b:G:M:x:@:A:f:t:r:s:v:n:B:p:m:q:R:Q:U:$:e:T:P:D:^:S:W:F:C:&:L:8:z:1:3:E:7:2:9:%:(:_:,:",
+        c = getopt_long(argc, argv, "hcO4ZKjH[0diN5a)Ik=wl6#uVXJY:b:G:M:x:@:A:f:t:r:s:v:n:B:p:m:q:R:Q:U:$:e:T:P:D:^:S:W:F:C:&:L:8:z:1:3:E:7:2:9:%:(:_:,:",
                         long_options, &option_index);
 
         if (c == -1) // end of options
@@ -992,7 +1006,7 @@ Parameters::Parameters(int argc, char** argv) {
             break;
 
         case ')':
-            standardGLs = true;
+            standardGLs = false;
             break;
 
         case '(':
@@ -1006,6 +1020,13 @@ Parameters::Parameters(int argc, char** argv) {
         case 'd':
             ++debuglevel;
             break;
+
+	case '#':
+	    
+	    // --version
+            cout << "version:  " << VERSION_GIT << endl;
+	    exit(0);
+	    break;
 
         case 'h':
             usage(argv);

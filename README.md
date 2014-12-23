@@ -1,7 +1,6 @@
 # *freebayes*, a haplotype-based variant detector
 ## user manual and guide
-
-### Erik Garrison <erik.garrison@bc.edu>
+[![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/ekg/freebayes?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 --------
 
@@ -23,7 +22,7 @@ alignments.  This method avoids one of the core problems with alignment-based
 variant detection--- that identical sequences may have multiple possible 
 alignments:
 
-<img src="http://hypervolu.me/~erik/freebayes/figures/haplotype_calling.png" 
+<img src="http://hypervolu.me/freebayes/figures/haplotype_calling.png" 
 width=500/>
 
 *FreeBayes* uses short-read alignments 
@@ -48,6 +47,11 @@ statistical models
 used in FreeBayes.  We ask that you cite this paper if you use FreeBayes in
 work that leads to publication.
 
+Please use this citation format:
+
+Garrison E, Marth G. Haplotype-based variant detection from short-read sequencing.
+*arXiv preprint arXiv:1207.3907 [q-bio.GN]* 2012
+
 If possible, please also refer to the version number provided by freebayes when 
 it is run without arguments or with the `--help` option.  For example, you 
 should see something like this:
@@ -55,7 +59,7 @@ should see something like this:
     version:  v0.9.10-3-g47a713e-dirty
 
 This provides both a point release number and a git commit id, which will 
-ensure precise reproduction of results.
+ensure precise reproducibility of results.
 
 
 ## Obtaining
@@ -65,8 +69,14 @@ tree.  Currently, the tree is hosted on github, and can be obtained via:
 
     git clone --recursive git://github.com/ekg/freebayes.git
 
-Note the use of --recursive.  This is required, as the project contains some
+Note the use of --recursive.  This is required in order to download all 
 nested git submodules for external repositories.
+
+After you've already done the above to clone the most recent development 
+version, if you wish to compile a specific version of FreeBayes from, you 
+can then do: 
+
+    git checkout v0.9.18 && git submodule update --recursive
 
 ### Resolving proxy issues with git
 
@@ -124,7 +134,58 @@ For a description of available command-line options and their defaults, run:
     freebayes --help
 
 
-## Calling variants
+## Examples
+
+Call variants assuming a diploid sample:
+
+    freebayes -f ref.fa aln.bam >var.vcf
+
+Require at least 5 supporting observations to consider a variant:
+
+    freebayes -f ref.fa -C 5 aln.bam >var.vcf
+
+Use a different ploidy:
+
+    freebayes -f ref.fa -p 4 aln.bam >var.vcf
+
+Assume a pooled sample with a known number of genome copies.  Note that this
+means that each sample identified in the BAM file is assumed to have 32 genome
+copies.  When running with highh --ploidy settings, it may be required to set
+`--use-best-n-alleles` to a low number to limit memory usage.
+
+    freebayes -f ref.fa -p 32 --use-best-n-alleles 4 --pooled-discrete aln.bam >var.vcf
+
+Generate frequency-based calls for all variants passing input thresholds:
+
+    freebayes -f ref.fa -F 0.01 -C 1 --pooled-continuous aln.bam >var.vcf
+
+Use an input VCF (bgzipped + tabix indexed) to force calls at particular alleles:
+
+    freebayes -f ref.fa -@ in.vcf.gz aln.bam >var.vcf
+
+Generate long haplotype calls over known variants:
+
+    freebayes -f ref.fa --haplotype-basis-alleles in.vcf.gz \
+                        --haplotype-length 50 aln.bam
+
+Naive variant calling: simply annotate observation counts of SNPs and indels:
+
+    freebayes -f ref.fa --haplotype-length 0 --min-alternate-count 1 \
+        --min-alternate-fraction 0 --pooled-continuous --report-monomorphic >var.vcf
+
+Parallel operation (use 36 cores in this case cores):
+
+    freebayes-parallel <(fasta_generate_regions.py ref.fa.fai 100000) 36 \
+        -f ref.fa aln.bam >var.vcf
+
+Note that any of the above examples can be made parallel by using the
+scripts/freebayes-parallel script.  If you find freebayes to be slow, you
+should probably be running it in parallel using this script to run on a single
+host, or generating a series of scripts, one per region, and run them on a
+cluster.
+
+
+## Calling variants: from fastq to VCF
 
 You've sequenced some samples.  You have a reference genome or assembled set of 
 contigs, and you'd like to determine reference-relative variants in your 
@@ -213,6 +274,32 @@ open them all simultaneously with freebayes.  The VCF output will have one
 column per sample in the input.
 
 
+## Performance tuning
+
+If you find freebayes to be slow, or use large amounts of memory, consider the
+following options:
+
+- Set `--use-best-n-alleles 4`: this will reduce the number of alleles that are
+  considered, which will decrease runtime at the cost of sensitivity to
+lower-frequency alleles at multiallelic loci.  Calculating site qualities
+requires O(samples\*genotypes) runtime, and the number of genotypes is
+exponential in ploidy and the number of alleles that are considered, so this is
+very important when working with high ploidy samples (and also
+`--pooled-discrete`). By default, freebayes puts no limit on this.
+
+- Remove `--genotype-qualities`: calculating genotype qualities requires
+  O(samples\*genotypes) memory.
+
+- Set higher input thresholds. Require that N reads in one sample support an
+  allele in order to consider it: `--min-alternate-count N`, or that the allele
+fraction in one sample is M: `--min-alternate-fraction M`. This will filter
+noisy alleles.  The defaults, `--min-alternate-count 2 --min-alternate-fraction
+0.2`, are most-suitable for diploid, moderate-to-high depth samples, and should
+be changed when working with different ploidy samples. Alternatively,
+`--min-alternate-qsum` can be used to set a specific quality sum, which may be
+more flexible than setting a hard count on the number of observations.
+
+
 ## Observation filters and qualities
 
 ### Input filters
@@ -264,12 +351,13 @@ haplotype.
 
 ### Effective base depth
 
-By default, filters are left completely open, as both mapping quality and base 
-quality are incorporated into the reported site quality (QUAL in the VCF) and 
+By default, filters are left completely open.
+Use `--experimental-gls` if you would like to integrate both base and mapping 
+quality are into the reported site quality (QUAL in the VCF) and 
 genotype quality (GQ, when supplying `--genotype-qualities`).  This integration 
 is driven by the "Effective Base Depth" metric first developed in 
 [snpTools](http://www.hgsc.bcm.edu/software/snptools), which scales observation 
-quality by mapping quality.  In short, *P(Obs|Genotype) ~ 
+quality by mapping quality.  When `--experimental-gls` is given, *P(Obs|Genotype) ~ 
 P(MappedCorrectly(Obs))P(SequencedCorrectly(Obs))*.
 
 
@@ -404,13 +492,33 @@ ection-methods-ensemble-freebayes-and-minimal-bam-preparation-pipelines/).
 For a push-button solution to variant detection, from reads to variant calls, 
 look no further than the [gkno genome analysis platform](http://gkno.me/).
 
+## Contributors
+
+FreeBayes is made by:
+
+- Erik Garrison 
+- Thomas Sibley 
+- Dillon Lee 
+- Patrick Marks 
+- Noah Spies 
+- Joshua Randall 
+- Jeremy Anderson
 
 ## Support
+
+### email
 
 Please report any issues or questions to the [freebayes mailing 
 list](https://groups.google.com/forum/#!forum/freebayes), [freebayes issue 
 tracker](https://github.com/ekg/freebayes/issues), or by email to 
-<erik.garrison@bc.edu>.
+<erik.garrison@gmail.com>.
+
+### IRC
+
+If you would like to chat real-time about freebayes, join #freebayes on
+freenode. A gittr.im chat is also available.
+
+### reversion
 
 Note that if you encounter issues with the development HEAD and you would like 
 a quick workaround for an issue that is likely to have been reintroduced 

@@ -58,12 +58,15 @@ vcf::Variant& Results::vcf(
     // set up VCF record-wide variables
 
     var.sequenceName = parser->currentSequenceName;
-    // XXX this should be the position of the matching reference haplotype
     var.position = referencePosition + 1;
     var.id = ".";
     var.filter = ".";
-    // XXX this should be the size of the maximum deletion + 1bp on the left end
+
+    // note that we set QUAL to 0 at loci with no data
     var.quality = max((long double) 0, nan2zero(big2phred(pHom)));
+    if (coverage == 0) {
+        var.quality = 0;
+    }
 
 
     // set up format string
@@ -90,6 +93,7 @@ vcf::Variant& Results::vcf(
     long double refReadMismatchSum = 0;
     long double refReadSNPSum = 0;
     long double refReadIndelSum = 0;
+    long double refReadSoftClipSum = 0;
     unsigned int refObsCount = 0;
     map<string, int> refObsBySequencingTechnology;
 
@@ -261,6 +265,7 @@ vcf::Variant& Results::vcf(
                 altReadMismatchSum += allele.readMismatchRate;
                 altReadSNPSum += allele.readSNPRate;
                 altReadIndelSum += allele.readIndelRate;
+				// TODO: add altReadSoftClipRate (avg)
                 if (allele.isProperPair) {
                     ++altproperPairs;
                 }
@@ -337,6 +342,8 @@ vcf::Variant& Results::vcf(
         var.info["RUN"].push_back(convert(parser->homopolymerRunLeft(altbase) + 1 + parser->homopolymerRunRight(altbase)));
         var.info["MQM"].push_back(convert((altObsCount == 0) ? 0 : nan2zero((double) altmqsum / (double) altObsCount)));
         var.info["RPP"].push_back(convert((altObsCount == 0) ? 0 : nan2zero(ln2phred(hoeffdingln(altReadsLeft, altReadsRight + altReadsLeft, 0.5)))));
+        var.info["RPR"].push_back(convert(altReadsRight));
+		var.info["RPL"].push_back(convert(altReadsLeft));
         var.info["EPP"].push_back(convert((altBasesLeft + altBasesRight == 0) ? 0 : nan2zero(ln2phred(hoeffdingln(altEndLeft, altEndLeft + altEndRight, 0.5)))));
         var.info["PAIRED"].push_back(convert((altObsCount == 0) ? 0 : nan2zero((double) altproperPairs / (double) altObsCount)));
         var.info["CIGAR"].push_back(adjustedCigar[altAllele.base()]);
@@ -496,6 +503,10 @@ vcf::Variant& Results::vcf(
             Sample& sample = *gc->second->sample;
             Result& sampleLikelihoods = s->second;
             Genotype* genotype = gc->second->genotype;
+            if (sample.observationCount() == 0) {
+                continue;
+            }
+
             sampleOutput["GT"].push_back(genotype->relativeGenotype(refbase, altAlleles));
 
             if (parameters.calculateMarginals) {
@@ -583,7 +594,7 @@ vcf::Variant& Results::vcf(
                         }
                     }
 
-                    // normalize GLs to -5 min 0 max using division by max and bounding at -5
+                    // normalize GLs to 0 max using division by max
                     long double minGL = 0;
                     for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
                         if (g->second < minGL) minGL = g->second;
@@ -592,8 +603,15 @@ vcf::Variant& Results::vcf(
                     for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
                         if (g->second > maxGL) maxGL = g->second;
                     }
-                    for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
-                        genotypeLikelihoodsOutput[g->first] = convert( max((long double)-10, (g->second-maxGL)) );
+
+                    if (parameters.limitGL == 0) {
+                        for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
+                            genotypeLikelihoodsOutput[g->first] = convert(g->second-maxGL);
+                        }
+                    } else {
+                        for (map<int, double>::iterator g = genotypeLikelihoods.begin(); g != genotypeLikelihoods.end(); ++g) {
+                            genotypeLikelihoodsOutput[g->first] = convert( max((long double) + parameters.limitGL, (g->second-maxGL)) );
+                        }
                     }
 
                     vector<string>& datalikelihoods = sampleOutput["GL"];

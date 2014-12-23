@@ -163,6 +163,9 @@ int main (int argc, char *argv[]) {
             } else if (coverage < parameters.minCoverage) {
                 DEBUG("post-filtering coverage of " << coverage << " is less than --min-coverage of " << parameters.minCoverage);
                 continue;
+            } else if (parameters.onlyUseInputAlleles) {
+                DEBUG("no input alleles, but using only input alleles for analysis, skipping position");
+                continue;
             }
 
             DEBUG2("coverage " << parser->currentSequenceName << ":" << parser->currentPosition << " == " << coverage);
@@ -177,6 +180,14 @@ int main (int argc, char *argv[]) {
             if (parameters.reportMonomorphic) {
                 DEBUG("calling at site even though there are no alternate observations");
             }
+        } else {
+            /*
+            cerr << "has input variants at " << parser->currentSequenceName << ":" << parser->currentPosition << endl;
+            vector<Allele>& inputs = parser->inputVariantAlleles[parser->currentPosition];
+            for (vector<Allele>::iterator a = inputs.begin(); a != inputs.end(); ++a) {
+                cerr << *a << endl;
+            }
+            */
         }
 
         // to ensure proper ordering of output stream
@@ -237,7 +248,7 @@ int main (int argc, char *argv[]) {
         long double theta = parameters.TH * parser->lastHaplotypeLength;
 
         // if we have only one viable allele, we don't have evidence for variation at this site
-        if (!parameters.reportMonomorphic && genotypeAlleles.size() <= 1 && genotypeAlleles.front().isReference()) {
+        if (!parser->hasInputVariantAllelesAtCurrentPosition() && !parameters.reportMonomorphic && genotypeAlleles.size() <= 1 && genotypeAlleles.front().isReference()) {
             DEBUG("no alternate genotype alleles passed filters at " << parser->currentSequenceName << ":" << parser->currentPosition);
             continue;
         }
@@ -293,11 +304,19 @@ int main (int argc, char *argv[]) {
 
         DEBUG2("calculating data likelihoods");
         // calculate data likelihoods
-        for (Samples::iterator s = samples.begin(); s != samples.end(); ++s) {
+        //for (Samples::iterator s = samples.begin(); s != samples.end(); ++s) {
+        for (vector<string>::iterator n = parser->sampleList.begin(); n != parser->sampleList.end(); ++n) {
 
-            string sampleName = s->first;
+            //string sampleName = s->first;
+            string& sampleName = *n;
             //DEBUG2("sample: " << sampleName);
-            Sample& sample = s->second;
+            //Sample& sample = s->second;
+            if (samples.find(sampleName) == samples.end()
+                && !(parser->hasInputVariantAllelesAtCurrentPosition()
+                     || parameters.reportMonomorphic)) {
+                continue;
+            }
+            Sample& sample = samples[sampleName];
             vector<Genotype>& genotypes = genotypesByPloidy[parser->currentSamplePloidy(sampleName)];
             vector<Genotype*> genotypesWithObs;
             for (vector<Genotype>::iterator g = genotypes.begin(); g != genotypes.end(); ++g) {
@@ -435,6 +454,7 @@ int main (int argc, char *argv[]) {
 
         long double bestComboOddsRatio = 0;
 
+        bool bestOverallComboIsHet = false;
         GenotypeCombo bestCombo; // = NULL;
 
         // what a hack...
@@ -597,24 +617,16 @@ int main (int argc, char *argv[]) {
         pVar = 1.0;
         pHom = 0.0;
         // calculates pvar and gets the best het combo
-        for (list<GenotypeCombo>::iterator gc = genotypeCombos.begin(); gc != genotypeCombos.end(); ++gc) {
-            if (gc->isHomozygous()
-                && (parameters.useRefAllele
-                    || !parameters.useRefAllele && gc->alleles().front() == referenceBase)) {
+        list<GenotypeCombo>::iterator gc = genotypeCombos.begin();
+        bestCombo = *gc;
+        for ( ; gc != genotypeCombos.end(); ++gc) {
+            if (gc->isHomozygous() && gc->alleles().front() == referenceBase) {
                 pVar -= big_exp(gc->posteriorProb - posteriorNormalizer);
                 pHom += big_exp(gc->posteriorProb - posteriorNormalizer);
+            } else if (gc == genotypeCombos.begin()) {
+                bestOverallComboIsHet = true;
             }
         }
-
-        // report the maximum a posteriori estimate
-        // unless we're reporting the GL maximum
-        if (!parameters.reportGenotypeLikelihoodMax) {
-            bestCombo = genotypeCombos.front();
-        } else {
-            bestCombo = glMax;
-        }
-
-        DEBUG2("best combo: " << bestCombo);
 
         // odds ratio between the first and second-best combinations
         if (genotypeCombos.size() > 1) {
@@ -670,7 +682,48 @@ int main (int argc, char *argv[]) {
             }
         }
 
-        //if (alts.empty()) alts = genotypeAlleles;
+        // reporting the GL maximum *over all alleles*
+        if (parameters.reportGenotypeLikelihoodMax) {
+            bestCombo = glMax;
+        } else {
+            // the default behavior is to report the GL maximum genotyping over the alleles in the best posterior genotyping
+
+            // select the maximum-likelihood GL given the alternates we have
+            // this is not the same thing as the GL max over all alleles!
+            // it is the GL max over the selected alleles at this point
+
+            vector<Allele> alleles = alts;
+            for (vector<Allele>::iterator a = genotypeAlleles.begin(); a != genotypeAlleles.end(); ++a) {
+                if (a->isReference()) {
+                    alleles.push_back(*a);
+                }
+            }
+            map<string, list<GenotypeCombo> > glMaxComboBasedOnAltsByPop;
+            for (map<string, SampleDataLikelihoods>::iterator p = sampleDataLikelihoodsByPopulation.begin(); p != sampleDataLikelihoodsByPopulation.end(); ++p) {
+                const string& population = p->first;
+                SampleDataLikelihoods& sampleDataLikelihoods = p->second;
+                GenotypeCombo glMaxBasedOnAlts;
+                for (SampleDataLikelihoods::iterator v = sampleDataLikelihoods.begin(); v != sampleDataLikelihoods.end(); ++v) {
+                    SampleDataLikelihood* m = NULL;
+                    for (vector<SampleDataLikelihood>::iterator d = v->begin(); d != v->end(); ++d) {
+                        if (d->genotype->matchesAlleles(alleles)) {
+                            m = &*d;
+                            break;
+                        }
+                    }
+                    assert(m != NULL);
+                    glMaxBasedOnAlts.push_back(m);
+                }
+                glMaxComboBasedOnAltsByPop[population].push_back(glMaxBasedOnAlts);
+            }
+            list<GenotypeCombo> glMaxBasedOnAltsGenotypeCombos; // build new combos into this list
+            combinePopulationCombos(glMaxBasedOnAltsGenotypeCombos, glMaxComboBasedOnAltsByPop);
+            bestCombo = glMaxBasedOnAltsGenotypeCombos.front();
+        }
+
+        DEBUG("best combo: " << bestCombo);
+
+        // output
 
         if (!alts.empty() && (1 - pHom.ToDouble()) >= parameters.PVL || parameters.PVL == 0) {
 

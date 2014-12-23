@@ -1,11 +1,5 @@
-test/
+paper/main.log
+paper/main.rtf
 bugs/
-*.bak
-*.patch
-*~
-.Rhistory
-simulation
-src/libbamtools.a
-performance
-math
-.DS_Store
+bin/
+src/version_git.h

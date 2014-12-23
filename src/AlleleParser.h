@@ -58,8 +58,9 @@ public:
     int snpCount;
     int indelCount;
     int alleleTypes;
+    Parameters parameters;
 
-    RegisteredAlignment(BamAlignment& alignment)
+    RegisteredAlignment(BamAlignment& alignment, Parameters parameters)
         //: alignment(alignment)
         : start(alignment.Position)
         , end(alignment.GetEndPosition())
@@ -69,6 +70,7 @@ public:
         , snpCount(0)
         , indelCount(0)
         , alleleTypes(0)
+        , parameters(parameters)
     {
         alignment.GetTag("RG", readgroup);
     }
@@ -171,9 +173,11 @@ public:
     // map from starting position to length->alle
     map<long int, vector<AllelicPrimitive> > haplotypeBasisAlleles;  // this is in the current reference sequence
     bool usingHaplotypeBasisAlleles;
+    bool usingVariantInputAlleles;
     long int rightmostHaplotypeBasisAllelePosition;
+    long int rightmostInputAllelePosition;
     void updateHaplotypeBasisAlleles(long int pos, int referenceLength);
-    bool allowedAllele(long int pos, string& ref, string& alt);
+    bool allowedHaplotypeBasisAllele(long int pos, string& ref, string& alt);
 
     Allele makeAllele(RegisteredAlignment& ra,
 		      AlleleType type,
@@ -241,7 +245,7 @@ public:
     RegisteredAlignment& registerAlignment(BamAlignment& alignment, RegisteredAlignment& ra, string& sampleName, string& sequencingTech);
     void clearRegisteredAlignments(void);
     void updateAlignmentQueue(long int position, vector<Allele*>& newAlleles, bool gettingPartials = false);
-    void updateInputVariants(void);
+    void updateInputVariants(long int pos, int referenceLength);
     void updateHaplotypeBasisAlleles(void);
     void removeAllelesWithoutReadSpan(vector<Allele*>& alleles, int probeLength, int haplotypeLength);
     void removeNonOverlappingAlleles(vector<Allele*>& alleles,
