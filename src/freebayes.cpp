@@ -59,6 +59,13 @@
 
 using namespace std; 
 
+// todo
+// generalize the main function to take the parameters as input
+// so that we can invoke the entire algorithm on different regions
+// when requested to run in parallel
+// take the targets (or whole genome) and make small jobs
+// run the main function for each region in an omp parallel for loop
+// only do this if the --parallel flag is set > 1
 
 // freebayes main
 int main (int argc, char *argv[]) {
@@ -183,7 +190,7 @@ int main (int argc, char *argv[]) {
         } else {
             /*
             cerr << "has input variants at " << parser->currentSequenceName << ":" << parser->currentPosition << endl;
-            vector<Allele>& inputs = parser->inputVariantAlleles[parser->currentPosition];
+            vector<Allele>& inputs = parser->inputVariantAlleles[parser->currentSequenceName][parser->currentPosition];
             for (vector<Allele>::iterator a = inputs.begin(); a != inputs.end(); ++a) {
                 cerr << *a << endl;
             }
@@ -387,18 +394,6 @@ int main (int argc, char *argv[]) {
             }
             sampleDataLikelihoods.push_back(sampleData);
 
-            DEBUG2("obtaining genotype likelihoods input from VCF");
-            int prevcount = sampleDataLikelihoods.size();
-            parser->addCurrentGenotypeLikelihoods(genotypesByPloidy, sampleDataLikelihoods);
-            // add these sample data likelihoods to 'invariant' likelihoods
-            inputLikelihoodCount += sampleDataLikelihoods.size() - prevcount;
-            parser->addCurrentGenotypeLikelihoods(genotypesByPloidy, invariantSampleDataLikelihoods);
-
-        }
-
-        // if there are not any input GLs, attempt to use the input ACs
-        if (inputLikelihoodCount == 0) {
-            parser->getInputAlleleCounts(genotypeAlleles, inputAlleleCounts);
         }
 
         DEBUG2("finished calculating data likelihoods");
